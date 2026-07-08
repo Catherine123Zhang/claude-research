@@ -1,0 +1,66 @@
+# Daily CLI Trending Tools Configuration
+
+# Schedule
+schedule:
+  run_time: "09:00"  # Run at 9 AM daily
+  timezone: "UTC"
+
+# CLI-Anything Hub Configuration
+cli_anything:
+  repository: "HKUDS/CLI-Anything"
+  github_token: "${GITHUB_TOKEN}"
+  # Poll for new tools every day
+  poll_interval_hours: 24
+
+# Evaluation Criteria
+evaluation:
+  # Agent compatibility scoring weights
+  weights:
+    json_support: 0.4
+    command_structure: 0.3
+    documentation: 0.2
+    popularity: 0.1
+
+  # Quality thresholds
+  min_agent_score: 50.0
+  min_quality_score: 40.0
+
+# Output
+output:
+  # Generate report formats
+  formats:
+    - json
+    - markdown
+    - html
+
+  # Report destination
+  report_dir: "./reports"
+
+  # Notification channels
+  channels:
+    - email
+    - webhook
+    - markdown_file
+
+# Notification Settings
+notifications:
+  email:
+    enabled: true
+    recipients:
+      - "${USER_EMAIL}"
+
+  webhook:
+    enabled: true
+    url: "${WEBHOOK_URL}"
+    method: "POST"
+
+# Categories to Track
+categories:
+  - "3D Graphics"
+  - "Image Processing"
+  - "Productivity"
+  - "AI/ML"
+  - "Data Science"
+  - "Development Tools"
+  - "System Administration"
+  - "Media Processing"
