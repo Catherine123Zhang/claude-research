@@ -26,10 +26,12 @@ h2 { font-size: 17px; margin: 0 0 12px; font-weight: 700; }
 .sub { color: var(--muted); margin: 0; }
 .num { font-family: var(--font-num); font-variant-numeric: tabular-nums; }
 .banner { background: var(--warn-soft); color: var(--warn); border-radius: 8px; padding: 10px 14px; font-size: 14px; margin-top: 12px; }
-.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr)); gap: 12px; }
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(180px, 100%), 1fr)); gap: 10px; }
+.kpi .value small { font-size: 14px; color: var(--muted); margin-left: 2px; }
+.metric-table th:first-child, .metric-table td:first-child { white-space: nowrap; }
 .kpi { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; display: grid; gap: 2px; }
 .kpi .label { color: var(--muted); font-size: 13px; }
-.kpi .value { font-family: var(--font-num); font-size: 30px; line-height: 1.2; }
+.kpi .value { font-family: var(--font-num); font-size: 26px; line-height: 1.2; }
 .kpi .note { color: var(--muted); font-size: 12px; }
 .kpi.own .value { color: var(--accent); }
 .two { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 28px; }
@@ -94,7 +96,12 @@ tr.own-row td { background: var(--accent-soft); }
 .tier-chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .tier-chip { font-size: 12px; display: inline-flex; gap: 4px; align-items: center; }
 .tier-chip b { font-family: var(--font-num); font-weight: 500; font-size: 11px; padding: 0 4px; border-radius: 3px; background: var(--line); }
-.recs { margin: 0; padding-left: 20px; display: grid; gap: 6px; max-width: 80ch; }
+.recs { margin: 0; padding: 0; list-style: none; display: grid; gap: 12px; }
+.rec { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; display: grid; gap: 10px; }
+.rec h3 { font-size: 15px; margin: 0; }
+.rec p { margin: 0; font-size: 13px; }
+.rec-label { display: inline-block; font-size: 11px; padding: 1px 8px; border-radius: 4px; margin-bottom: 4px; background: var(--line); color: var(--muted); }
+.rec-label.act { background: var(--accent-soft); color: var(--accent); }
 .three { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr)); gap: 28px; }
 footer { color: var(--muted); font-size: 13px; border-top: 1px solid var(--line); padding-top: 16px; }
 footer p { margin: 0 0 6px; max-width: 70ch; }
@@ -111,11 +118,12 @@ footer p { margin: 0 0 6px; max-width: 70ch; }
   <section class="kpis" id="kpis" aria-label="总览"></section>
   <p class="summary" id="summary" hidden></p>
 
-  <section class="three">
-    <div>
-      <h2>各平台提及率</h2>
-      <div class="bars" id="by-platform"></div>
-    </div>
+  <section>
+    <h2>平台表现</h2>
+    <div class="scroll"><table class="metric-table" id="platform-table"></table></div>
+  </section>
+
+  <section class="two">
     <div>
       <h2>AI 最常引用的网站</h2>
       <div class="bars" id="by-domain"></div>
@@ -164,7 +172,7 @@ footer p { margin: 0 0 6px; max-width: 70ch; }
   </section>
 
   <footer>
-    <p><strong>提及率</strong>：回答里出现品牌名或别名的比例。<strong>排名</strong>：在同一条回答里，按出现先后排第几个品牌。<strong>被引用</strong>：AI 列出的参考来源里有你的域名。<strong>情感倾向</strong>和<strong>全部品牌</strong>由 Claude 阅读回答后判断（运行时加 --judge）。</p>
+    <p><strong>提及率</strong>：回答里出现品牌名或别名的比例。<strong>SOV</strong>（声量份额）：每条回答里每个品牌记一次，你被提到的次数占所有品牌被提到次数的比例。<strong>Top1 / Top3 提及率</strong>：你排第一 / 排前三的回答占全部回答的比例。<strong>排名</strong>：在同一条回答里，按出现先后排第几个品牌。<strong>被引用</strong>：AI 列出的参考来源里有你的域名。<strong>情感倾向</strong>和<strong>全部品牌</strong>由 Claude 阅读回答后判断（运行时加 --judge）。</p>
     <p>同一个问题每次问，AI 的回答都会不同，所以每个问题会采样多次再取比例。API 返回的结果和 App 里看到的结果也可能不同。</p>
   </footer>
 </div>
@@ -188,30 +196,28 @@ function render() {
   $("scope").textContent = `${DATA.questions.length} 个问题 × ${DATA.platforms.length} 个平台 × 每题 ${DATA.samples} 次采样，共 ${ok.length} 条有效回答` + (failed ? `（${failed} 条请求失败）` : "");
   $("mock-banner").hidden = !DATA.mock;
 
-  // KPI tiles
-  const mentioned = ok.filter((r) => ownOf(r).mentioned);
-  const ranks = mentioned.map((r) => ownOf(r).rank);
-  const avgRank = ranks.length ? (ranks.reduce((a, b) => a + b, 0) / ranks.length).toFixed(1) : "—";
-  const cited = ok.filter((r) => ownOf(r).site_cited).length;
-  const compRates = DATA.brands.filter((b) => !b.own).map((b) => ({
-    name: b.name, n: ok.filter((r) => r.analysis.brands.find((x) => x.name === b.name)?.mentioned).length,
-  })).sort((a, b) => b.n - a.n);
-  const top = compRates[0];
-  $("kpis").innerHTML = [
-    { cls: "own", label: "品牌提及率", value: `${pct(mentioned.length, ok.length)}%`, note: `${mentioned.length} / ${ok.length} 条回答提到 ${ownName}` },
-    { cls: "own", label: "平均排名", value: avgRank, note: "只算提到你的回答，1 = 第一个被提到" },
-    { cls: "own", label: "官网被 AI 引用", value: `${pct(cited, ok.length)}%`, note: `${cited} 条回答的参考来源里有你的网站` },
-    { cls: "", label: "提及最多的竞品", value: top ? `${pct(top.n, ok.length)}%` : "—", note: top ? top.name : "未配置竞品" },
-    sentimentTile(mentioned),
-  ].filter(Boolean).map((k) => `<div class="kpi ${k.cls}"><span class="label">${esc(k.label)}</span><span class="value">${esc(k.value)}</span><span class="note">${esc(k.note)}</span></div>`).join("");
+  // KPI tiles (爱搜's 数据概览)
+  const m = metrics(ok);
+  const tiles = [
+    ["对话次数", m.n, "次", "有效回答数"],
+    ["提及品牌对话", m.mentioned, "次", `提到 ${ownName} 的回答`],
+    ["品牌提及率", m.rate, "%", "提及品牌对话 ÷ 对话次数"],
+    ["品牌提及次数", m.count, "次", "回答里出现品牌名的总次数"],
+    ["SOV", m.sov, "%", "你被提到的次数占全部品牌的比例"],
+    ["Top1 提及率", m.top1, "%", "第一个被提到的回答占比"],
+    ["Top3 提及率", m.top3, "%", "排在前三的回答占比"],
+    ["平均提及排名", m.avgRank, "名", "只算提到你的回答"],
+    ["品牌好感度", m.favor, "分", m.favor === "—" ? "运行时加 --judge 才有" : "正面 100、中性 60、负面 0 的平均"],
+    ["官网被引", m.cited, "%", "参考来源里有你网站的回答占比"],
+  ];
+  $("kpis").innerHTML = tiles.map(([label, v, unit, note]) => `<div class="kpi own"><span class="label">${esc(label)}</span><span class="value">${esc(v)}${v === "—" ? "" : `<small>${esc(unit)}</small>`}</span><span class="note">${esc(note)}</span></div>`).join("");
 
-  // Per-platform mention rate
-  $("by-platform").innerHTML = DATA.platforms.map((p) => {
-    const rs = ok.filter((r) => r.platform === p.id);
-    const n = rs.filter((r) => ownOf(r).mentioned).length;
-    const v = pct(n, rs.length);
-    return barRow(p.label, v, `${v}%`, true);
-  }).join("");
+  // Platform x metric table (爱搜's 平台表现)
+  const per = Object.fromEntries(DATA.platforms.map((p) => [p.id, metrics(ok.filter((r) => r.platform === p.id))]));
+  const rowsDef = [["对话次数", "n", ""], ["品牌提及率", "rate", "%"], ["SOV", "sov", "%"], ["Top1 提及率", "top1", "%"],
+    ["Top3 提及率", "top3", "%"], ["平均提及排名", "avgRank", " 名"], ["品牌好感度", "favor", ""], ["官网被引", "cited", "%"]];
+  $("platform-table").innerHTML = `<thead><tr><th>指标</th>${DATA.platforms.map((p) => `<th class="c">${esc(p.label)}</th>`).join("")}<th class="c">全部</th></tr></thead><tbody>${rowsDef.map(([label, key, unit]) =>
+    `<tr><td>${esc(label)}</td>${[...DATA.platforms.map((p) => per[p.id]), m].map((x) => `<td class="c num">${x[key] === "—" ? "—" : esc(x[key]) + unit}</td>`).join("")}</tr>`).join("")}</tbody>`;
 
   // Top cited domains (share of answers that cite each domain at least once)
   const domainCount = {};
@@ -322,6 +328,7 @@ function renderDiagnosis() {
         <div><div class="diag-label">本品牌表现 · 提及率 ${ownRate}%${own.avg_rank ? ` · 平均第 ${own.avg_rank} 名` : ""}</div><div class="track"><div class="fill own" style="width:${Math.max(ownRate, 1)}%"></div></div></div>
         <div><div class="diag-label">竞品梯队参照</div><div class="tier-chips">${comps || '<span class="sub">无</span>'}</div></div>
       </div>
+      <div><div class="diag-label">信源偏好 · 倾向：${esc(st.site_types?.[0]?.[0] || "无引用")}</div>${d?.source_preference ? `<p>${esc(d.source_preference)}</p>` : ""}</div>
       ${d ? `<div class="diag-row">
         <div><div class="diag-label">平台差异解释</div><p>${esc(d.explanation)}</p></div>
         <div><div class="diag-label">建议动作</div><ul>${d.actions.map((a) => `<li>${esc(a)}</li>`).join("")}</ul></div>
@@ -330,7 +337,12 @@ function renderDiagnosis() {
   }).join("");
   const recs = diag?.recommendations || [];
   $("recs-wrap").hidden = !recs.length;
-  $("recs").innerHTML = recs.map((r) => `<li>${esc(r)}</li>`).join("");
+  $("recs").innerHTML = recs.map((r, i) => typeof r === "string" ? `<li class="rec"><p>${esc(r)}</p></li>` : `
+    <li class="rec"><h3>${i + 1}. ${esc(r.title)}</h3>
+      <div class="diag-row">
+        <div><span class="rec-label">建议依据</span><p>${esc(r.basis)}</p></div>
+        <div><span class="rec-label act">建议动作</span><p>${esc(r.action)}</p></div>
+      </div></li>`).join("");
 }
 
 function renderSources() {
@@ -395,6 +407,34 @@ function renderArticles() {
     btn.setAttribute("aria-expanded", String(open));
     $(btn.getAttribute("aria-controls")).hidden = !open;
   }));
+}
+
+// Headline numbers for a set of answers. Mention = name or alias appears; rank uses the judge's full brand order when present.
+function metrics(rs) {
+  const FAVOR = { 正面: 100, 中性: 60, 负面: 0 };
+  let mentioned = 0, count = 0, ownHits = 0, allHits = 0, top1 = 0, top3 = 0, rankSum = 0, cited = 0;
+  const favor = [];
+  rs.forEach((r) => {
+    const own = ownOf(r);
+    const hits = brandHits(r);
+    allHits += hits.size;
+    if (own.site_cited) cited++;
+    if (!own.mentioned) return;
+    mentioned++; count += own.count; ownHits++;
+    const rank = hits.get(ownName) || own.rank;
+    rankSum += rank;
+    if (rank === 1) top1++;
+    if (rank <= 3) top3++;
+    const s = r.judge?.sentiment;
+    if (s in FAVOR) favor.push(FAVOR[s]);
+  });
+  return {
+    n: rs.length, mentioned, count, rate: pct(mentioned, rs.length), sov: pct(ownHits, allHits),
+    top1: pct(top1, rs.length), top3: pct(top3, rs.length),
+    avgRank: mentioned ? (rankSum / mentioned).toFixed(1) : "—",
+    favor: favor.length ? (favor.reduce((a, b) => a + b, 0) / favor.length).toFixed(1) : "—",
+    cited: pct(cited, rs.length),
+  };
 }
 
 function sentimentTile(mentioned) {
