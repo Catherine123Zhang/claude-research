@@ -9,13 +9,17 @@
   --accent: #0e7c6b; --accent-soft: #d3ece6; --warn: #b45309; --warn-soft: #fdecd3; --bar: #9fb3ae;
   --font-body: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
   --font-num: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  /* trend-line series, fixed order by brand (validated palette) */
+  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100; --s5: #e87ba4; --s6: #008300; --s7: #6250d6; --s8: #e34948;
 }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
   --bg: #0f1615; --surface: #172120; --ink: #e5eeec; --muted: #93a5a1; --line: #2a3735;
-  --accent: #3cc3a9; --accent-soft: #173a34; --warn: #f0a44b; --warn-soft: #3a2a14; --bar: #4b5f5b; color-scheme: dark } }
+  --accent: #3cc3a9; --accent-soft: #173a34; --warn: #f0a44b; --warn-soft: #3a2a14; --bar: #4b5f5b; color-scheme: dark;
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s6: #0ca30c; --s7: #9085e9; --s8: #e66767; } }
 :root[data-theme="dark"] {
   --bg: #0f1615; --surface: #172120; --ink: #e5eeec; --muted: #93a5a1; --line: #2a3735;
-  --accent: #3cc3a9; --accent-soft: #173a34; --warn: #f0a44b; --warn-soft: #3a2a14; --bar: #4b5f5b; color-scheme: dark }
+  --accent: #3cc3a9; --accent-soft: #173a34; --warn: #f0a44b; --warn-soft: #3a2a14; --bar: #4b5f5b; color-scheme: dark;
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s6: #0ca30c; --s7: #9085e9; --s8: #e66767; }
 body { background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.6; }
 .wrap { max-width: 1080px; margin: 0 auto; padding-block: 28px 56px;
   padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
@@ -102,6 +106,27 @@ tr.own-row td { background: var(--accent-soft); }
 .rec p { margin: 0; font-size: 13px; }
 .rec-label { display: inline-block; font-size: 11px; padding: 1px 8px; border-radius: 4px; margin-bottom: 4px; background: var(--line); color: var(--muted); }
 .rec-label.act { background: var(--accent-soft); color: var(--accent); }
+.heat td.hc { padding: 3px; }
+.heat .hv { display: block; text-align: center; font-family: var(--font-num); font-size: 13px; padding: 7px 4px; border-radius: 5px; min-width: 52px; }
+.hv.b0 { background: var(--line); color: var(--muted); }
+.hv.b1 { background: color-mix(in srgb, var(--accent) 25%, var(--surface)); color: var(--ink); }
+.hv.b2 { background: color-mix(in srgb, var(--accent) 55%, var(--surface)); color: var(--ink); }
+.hv.b3 { background: var(--accent); color: var(--surface); }
+.heat-legend { display: flex; flex-wrap: wrap; gap: 10px; font-size: 12px; color: var(--muted); align-items: center; }
+.heat-legend .hv { display: inline-block; min-width: 0; width: 14px; height: 14px; padding: 0; vertical-align: -2px; margin-right: 4px; }
+.toolbar { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px; margin-bottom: 12px; align-items: center; }
+.toolbar .chips { margin: 0; }
+.trend-wrap { position: relative; }
+.trend-svg { width: 100%; height: auto; display: block; overflow: visible; }
+.trend-svg text { font-size: 11px; fill: var(--muted); font-family: var(--font-body); }
+.trend-svg .lbl { font-size: 12px; fill: var(--ink); }
+.trend-svg .grid { stroke: var(--line); stroke-width: 1; }
+.legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 13px; margin-bottom: 8px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend i { width: 14px; height: 3px; border-radius: 2px; display: inline-block; }
+.tip { position: absolute; pointer-events: none; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font-size: 12px; box-shadow: 0 4px 14px rgb(0 0 0 / 0.12); min-width: 150px; }
+.tip div { display: flex; justify-content: space-between; gap: 12px; }
+.tip i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
 .three { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr)); gap: 28px; }
 footer { color: var(--muted); font-size: 13px; border-top: 1px solid var(--line); padding-top: 16px; }
 footer p { margin: 0 0 6px; max-width: 70ch; }
@@ -121,6 +146,26 @@ footer p { margin: 0 0 6px; max-width: 70ch; }
   <section>
     <h2>平台表现</h2>
     <div class="scroll"><table class="metric-table" id="platform-table"></table></div>
+  </section>
+
+  <section>
+    <h2>提及率热力图（问题 × 平台）</h2>
+    <div class="toolbar">
+      <div class="chips" id="heat-chips" role="group" aria-label="选择指标">
+        <button type="button" class="chip" id="heat-rate" data-k="rate" aria-pressed="true">整体提及率</button>
+        <button type="button" class="chip" id="heat-top1" data-k="top1" aria-pressed="false">Top1 提及率</button>
+        <button type="button" class="chip" id="heat-top3" data-k="top3" aria-pressed="false">Top3 提及率</button>
+      </div>
+      <div class="heat-legend"><span><span class="hv b0"></span>0%</span><span><span class="hv b1"></span>1–49%</span><span><span class="hv b2"></span>50–79%</span><span><span class="hv b3"></span>80–100%</span></div>
+    </div>
+    <div class="scroll"><table class="heat" id="heat-table"></table></div>
+  </section>
+
+  <section>
+    <h2>提及率趋势</h2>
+    <p class="sub section-note" id="trend-note"></p>
+    <div class="legend" id="trend-legend"></div>
+    <div class="trend-wrap" id="trend-wrap"><svg class="trend-svg" id="trend" role="img" aria-label="各品牌提及率随监测次数的变化"></svg><div class="tip" id="tip" hidden></div></div>
   </section>
 
   <section class="two">
@@ -239,6 +284,14 @@ function render() {
     ? types.map(([t, n]) => barRow(t, (n / maxT) * 100, `${pct(n, totalCites)}%`, t === "品牌官网")).join("")
     : `<p class="sub">回答里没有引用来源。</p>`;
 
+  renderHeat("rate");
+  $("heat-chips").addEventListener("click", (e) => {
+    const btn = e.target.closest(".chip");
+    if (!btn) return;
+    $("heat-chips").querySelectorAll(".chip").forEach((b) => b.setAttribute("aria-pressed", String(b === btn)));
+    renderHeat(btn.dataset.k);
+  });
+  renderTrend();
   renderBrands();
   renderDiagnosis();
   renderSources();
@@ -435,6 +488,76 @@ function metrics(rs) {
     favor: favor.length ? (favor.reduce((a, b) => a + b, 0) / favor.length).toFixed(1) : "—",
     cited: pct(cited, rs.length),
   };
+}
+
+function renderHeat(key) {
+  const band = (v) => (v === 0 ? "b0" : v < 50 ? "b1" : v < 80 ? "b2" : "b3");
+  const cell = (rs) => {
+    if (!rs.length) return `<td class="hc"><span class="hv b0">—</span></td>`;
+    const v = metrics(rs)[key];
+    return `<td class="hc"><span class="hv ${band(v)}" title="${rs.length} 条回答">${v}%</span></td>`;
+  };
+  const head = `<thead><tr><th>问题</th>${DATA.platforms.map((p) => `<th class="c">${esc(p.label)}</th>`).join("")}<th class="c">平均</th></tr></thead>`;
+  const body = DATA.questions.map((q, qi) => {
+    const rs = ok.filter((r) => r.q === qi);
+    return `<tr><td>${esc(q.text)}</td>${DATA.platforms.map((p) => cell(rs.filter((r) => r.platform === p.id))).join("")}${cell(rs)}</tr>`;
+  }).join("");
+  $("heat-table").innerHTML = head + `<tbody>${body}</tbody>`;
+}
+
+function renderTrend() {
+  const T = DATA.trend;
+  if (!T || T.runs.length < 2) {
+    $("trend-note").textContent = "至少要运行两次监测才有趋势。建议每天或每周跑一次。";
+    $("trend-wrap").hidden = true;
+    return;
+  }
+  // Color follows the brand, in a fixed order: you, then configured competitors, then discovered brands.
+  const order = [...DATA.brands.map((b) => b.name), ...Object.keys(T.rates).filter((n) => !DATA.brands.some((b) => b.name === n)).sort()];
+  const color = (n) => { const i = order.indexOf(n); return i >= 0 && i < 8 ? `var(--s${i + 1})` : "var(--muted)"; };
+  const last = T.runs.length - 1;
+  const comps = Object.keys(T.rates).filter((n) => n !== ownName).sort((a, b) => T.rates[b][last] - T.rates[a][last]).slice(0, 4);
+  const series = [ownName, ...comps].filter((n) => T.rates[n]);
+  $("trend-note").textContent = `最近 ${T.runs.length} 次监测里，你和最新一次提及率最高的 ${comps.length} 个竞品。把鼠标移到图上看每次的数值。`;
+  $("trend-legend").innerHTML = series.map((n) => `<span><i style="background:${color(n)}"></i>${esc(n)}${n === ownName ? "（你）" : ""}</span>`).join("");
+
+  const W = 760, H = 280, L = 40, R = 130, Tp = 12, B = 30;
+  const x = (i) => L + (i * (W - L - R)) / last;
+  const y = (v) => Tp + (1 - v) * (H - Tp - B);
+  let svg = "";
+  [0, 0.25, 0.5, 0.75, 1].forEach((v) => { svg += `<line class="grid" x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}"/><text x="${L - 6}" y="${y(v) + 4}" text-anchor="end">${v * 100}%</text>`; });
+  T.runs.forEach((id, i) => { if (last <= 6 || i % Math.ceil(last / 6) === 0 || i === last) svg += `<text x="${x(i)}" y="${H - 8}" text-anchor="middle">第 ${i + 1} 次 · ${esc(id.slice(5, 10))}</text>`; });
+  // End labels, nudged apart so they never overlap.
+  const ends = series.map((n) => ({ n, y: y(T.rates[n][last]) })).sort((a, b) => a.y - b.y);
+  for (let i = 1; i < ends.length; i++) if (ends[i].y - ends[i - 1].y < 15) ends[i].y = ends[i - 1].y + 15;
+  series.forEach((n) => {
+    const pts = T.rates[n].map((v, i) => `${x(i)},${y(v)}`).join(" ");
+    svg += `<polyline points="${pts}" fill="none" stroke="${color(n)}" stroke-width="${n === ownName ? 3 : 2}" stroke-linejoin="round" stroke-linecap="round"/>`;
+    T.rates[n].forEach((v, i) => { svg += `<circle cx="${x(i)}" cy="${y(v)}" r="4" fill="${color(n)}" stroke="var(--bg)" stroke-width="2"/>`; });
+  });
+  ends.forEach(({ n, y: ly }) => { svg += `<text class="lbl" x="${W - R + 10}" y="${ly + 4}">${esc(n.length > 14 ? n.slice(0, 13) + "…" : n)} ${Math.round(T.rates[n][last] * 100)}%</text>`; });
+  svg += `<line id="cross" class="grid" y1="${Tp}" y2="${H - B}" stroke-dasharray="3 3" visibility="hidden"/>`;
+  T.runs.forEach((_, i) => {
+    const w = (W - L - R) / last;
+    svg += `<rect data-i="${i}" x="${x(i) - w / 2}" y="${Tp}" width="${w}" height="${H - Tp - B}" fill="transparent"/>`;
+  });
+  const el = $("trend");
+  el.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  el.innerHTML = svg;
+  const tip = $("tip"), cross = el.querySelector("#cross");
+  el.querySelectorAll("rect[data-i]").forEach((r) => {
+    r.addEventListener("pointerenter", () => {
+      const i = +r.dataset.i;
+      cross.setAttribute("x1", x(i)); cross.setAttribute("x2", x(i)); cross.setAttribute("visibility", "visible");
+      tip.innerHTML = `<strong>第 ${i + 1} 次 · ${esc(T.runs[i].replace("T", " "))}</strong>` + series.slice().sort((a, b) => T.rates[b][i] - T.rates[a][i])
+        .map((n) => `<div><span><i style="background:${color(n)}"></i>${esc(n)}</span><span class="num">${Math.round(T.rates[n][i] * 100)}%</span></div>`).join("");
+      tip.hidden = false;
+      const box = el.getBoundingClientRect(), px = (x(i) / W) * box.width;
+      tip.style.top = "8px";
+      tip.style.left = `${Math.min(Math.max(px + 12, 0), box.width - tip.offsetWidth)}px`;
+    });
+  });
+  el.addEventListener("pointerleave", () => { tip.hidden = true; cross.setAttribute("visibility", "hidden"); });
 }
 
 function sentimentTile(mentioned) {

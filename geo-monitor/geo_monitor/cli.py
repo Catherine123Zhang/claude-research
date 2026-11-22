@@ -14,7 +14,7 @@ from pathlib import Path
 
 import yaml
 
-from .aggregate import platform_stats
+from .aggregate import brand_hits, platform_stats
 from .analyze import analyze, site_name
 from .diagnose import run_mock
 from .providers import build_provider
@@ -62,7 +62,7 @@ def cmd_run(cfg: dict, mock: bool, use_judge: bool, workers: int) -> None:
     def one(job):
         p, qi, q, s = job
         try:
-            provider = MockProvider(p["id"], brand_names, sample=s) if mock else build_provider(p)
+            provider = MockProvider(p["id"], brand_names, sample=s, run_id=run_id) if mock else build_provider(p)
             ans = provider.ask(q["text"])
         except Exception as e:  # noqa: BLE001 - missing key, bad config: record it and keep going
             from .providers import Answer
@@ -95,13 +95,31 @@ def cmd_run(cfg: dict, mock: bool, use_judge: bool, workers: int) -> None:
     print(f"本次运行 {run_id}: {len(records)} 条回答，失败 {failed} 条，已写入 {out}", file=sys.stderr)
 
 
-def latest_run(cfg: dict) -> tuple[str, list[dict]]:
+def all_rows(cfg: dict) -> list[dict]:
     path = Path(cfg["results_file"])
     if not path.exists():
         sys.exit(f"没有找到结果文件 {path}，请先运行 run。")
-    rows = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+
+
+def latest_run(cfg: dict) -> tuple[str, list[dict]]:
+    rows = all_rows(cfg)
     run_id = max(r["run_id"] for r in rows)
     return run_id, [r for r in rows if r["run_id"] == run_id]
+
+
+def trend(cfg: dict, last: int = 12) -> dict:
+    """Mention rate of every brand in each of the last `last` runs."""
+    tracked = tracked_brands(cfg)
+    rows = all_rows(cfg)
+    runs = sorted({r["run_id"] for r in rows})[-last:]
+    rates: dict[str, list[float]] = {}
+    for i, run in enumerate(runs):
+        recs = [r for r in rows if r["run_id"] == run and not r.get("error")]
+        for r in recs:
+            for name in brand_hits(r, tracked):
+                rates.setdefault(name, [0.0] * len(runs))[i] += 1 / len(recs)
+    return {"runs": runs, "rates": {k: [round(v, 3) for v in vs] for k, vs in rates.items()}}
 
 
 def run_stats(cfg: dict, records: list[dict]) -> dict:
@@ -143,6 +161,7 @@ def cmd_report(cfg: dict, out_path: str, fragment: bool) -> None:
         "records": [{k: r.get(k) for k in ("platform", "q", "sample", "text", "citations", "queries",
                                               "error", "analysis", "judge")} for r in latest],
         "stats": run_stats(cfg, latest),
+        "trend": trend(cfg),
         "site_names": {d: site_name(d) for r in latest if not r.get("error") for d in r["analysis"]["domains"] if d},
         "diagnosis": json.loads(diag_file.read_text(encoding="utf-8")) if diag_file.exists() else None,
     }

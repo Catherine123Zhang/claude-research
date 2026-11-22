@@ -36,13 +36,14 @@ EXTRA_BRANDS = ["Xiaomi", "Usmile", "Seago", "Lebooo"]
 
 
 class MockProvider:
-    def __init__(self, platform_id: str, brands: list[str], sample: int = 0):
+    def __init__(self, platform_id: str, brands: list[str], sample: int = 0, run_id: str = ""):
         self.platform_id = platform_id
         self.brands = brands  # display names, first one is the monitored brand
         self.sample = sample
+        self.run_id = run_id  # each run gets different sample answers, so trends have something to show
 
     def ask(self, question: str) -> Answer:
-        seed = hashlib.sha256(f"{self.platform_id}|{question}|{self.sample}".encode()).hexdigest()
+        seed = hashlib.sha256(f"{self.run_id}|{self.platform_id}|{question}|{self.sample}".encode()).hexdigest()
         rng = random.Random(seed)
         own, others = self.brands[0], self.brands[1:]
         picked = rng.sample(others, k=min(len(others), rng.randint(2, 4)))
