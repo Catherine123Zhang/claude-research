@@ -12,6 +12,7 @@
 | 全部品牌、情感倾向 | 由 Claude 读回答后判断（加 `--judge`） |
 | 品牌排行 | 所有被提到的品牌（含你没设为竞品的）按提及率、平均排名排序，分平台对比 |
 | 被引用的文章 | 每篇被 AI 引用的网页：站点、类型、哪些平台引用、涉及几个问题、引用几次，点开看每条引用记录 |
+| 各平台梯队与诊断 | 每个平台里你和竞品分别在 T1/T2/T3 哪一档；加跑 `diagnose` 后由 Claude 写平台差异解释、建议动作和整体优化建议 |
 
 结果生成一个 HTML 看板，可以按平台筛选，点开问题能看到每条回答的原文和引用来源。
 
@@ -21,6 +22,7 @@
 pip install -r requirements.txt
 cp config.example.yaml config.yaml
 python -m geo_monitor run --mock      # 用离线模拟数据
+python -m geo_monitor diagnose        # 模拟数据下生成示例诊断文字
 python -m geo_monitor report          # 生成 report.html
 ```
 
@@ -45,6 +47,7 @@ python -m geo_monitor report          # 生成 report.html
 
    ```bash
    python -m geo_monitor run --judge     # --judge：用 Claude 识别全部品牌和情感倾向
+   python -m geo_monitor diagnose        # 可选：用 Claude 写各平台解释和优化建议
    python -m geo_monitor report
    ```
 
@@ -67,6 +70,8 @@ python -m geo_monitor report          # 生成 report.html
 geo_monitor/
   cli.py                 run / report 命令
   analyze.py             品牌提及、排名、引用域名、站点类型
+  aggregate.py           各平台统计和梯队
+  diagnose.py            Claude 写诊断和优化建议
   llm_judge.py           Claude 识别全部品牌和情感（--judge）
   report_template.html   看板模板
   providers/             各 AI 平台的调用代码；mock.py 是离线模拟

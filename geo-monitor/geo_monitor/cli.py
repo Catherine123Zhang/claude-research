@@ -14,7 +14,9 @@ from pathlib import Path
 
 import yaml
 
+from .aggregate import platform_stats
 from .analyze import analyze
+from .diagnose import run_mock
 from .providers import build_provider
 from .providers.mock import MockProvider
 
@@ -93,14 +95,43 @@ def cmd_run(cfg: dict, mock: bool, use_judge: bool, workers: int) -> None:
     print(f"本次运行 {run_id}: {len(records)} 条回答，失败 {failed} 条，已写入 {out}", file=sys.stderr)
 
 
-def cmd_report(cfg: dict, out_path: str, fragment: bool) -> None:
+def latest_run(cfg: dict) -> tuple[str, list[dict]]:
     path = Path(cfg["results_file"])
     if not path.exists():
         sys.exit(f"没有找到结果文件 {path}，请先运行 run。")
     rows = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
     run_id = max(r["run_id"] for r in rows)
-    latest = [r for r in rows if r["run_id"] == run_id]
+    return run_id, [r for r in rows if r["run_id"] == run_id]
+
+
+def run_stats(cfg: dict, records: list[dict]) -> dict:
+    ran = {r["platform"] for r in records}
+    return platform_stats(records, tracked_brands(cfg), [p for p in cfg["platforms"] if p["id"] in ran])
+
+
+def diagnosis_path(cfg: dict, run_id: str) -> Path:
+    return Path(cfg["results_file"]).with_name(f"diagnosis-{run_id.replace(':', '')}.json")
+
+
+def cmd_diagnose(cfg: dict) -> None:
+    run_id, latest = latest_run(cfg)
+    stats = run_stats(cfg, latest)
+    name = cfg["brand"]["name"]
+    if any(r.get("mock") for r in latest):
+        result = run_mock(stats, name, cfg["brand"]["domains"])
+    else:
+        from .diagnose import run_claude
+
+        result = run_claude(stats, name, cfg["questions"], cfg.get("judge_model", "claude-opus-5-5"))
+    out = diagnosis_path(cfg, run_id)
+    out.write_text(json.dumps(result, ensure_ascii=False, indent=1), encoding="utf-8")
+    print(f"诊断已生成: {out}", file=sys.stderr)
+
+
+def cmd_report(cfg: dict, out_path: str, fragment: bool) -> None:
+    run_id, latest = latest_run(cfg)
     ran = {r["platform"] for r in latest}
+    diag_file = diagnosis_path(cfg, run_id)
     data = {
         "run_id": run_id,
         "mock": any(r.get("mock") for r in latest),
@@ -111,6 +142,8 @@ def cmd_report(cfg: dict, out_path: str, fragment: bool) -> None:
         "questions": [{"text": q["text"], "category": q.get("category", "")} for q in cfg["questions"]],
         "records": [{k: r.get(k) for k in ("platform", "q", "sample", "text", "citations", "queries",
                                               "error", "analysis", "judge")} for r in latest],
+        "stats": run_stats(cfg, latest),
+        "diagnosis": json.loads(diag_file.read_text(encoding="utf-8")) if diag_file.exists() else None,
     }
     payload = json.dumps(data, ensure_ascii=False).replace("</", "<\\/")
     body = TEMPLATE.read_text(encoding="utf-8").replace("/*__DATA__*/null", payload)
@@ -131,6 +164,8 @@ def main(argv: list[str] | None = None) -> None:
     r.add_argument("--mock", action="store_true", help="用离线模拟数据，不调用任何 API")
     r.add_argument("--judge", action="store_true", help="用 Claude 识别回答里的全部品牌和情感倾向")
     r.add_argument("--workers", type=int, default=4)
+    d = sub.add_parser("diagnose", help="用 Claude 给最近一次运行写各平台解释和优化建议")
+    d.add_argument("--config", default="config.yaml")
     g = sub.add_parser("report", help="把最近一次运行生成 HTML 看板")
     g.add_argument("--config", default="config.yaml")
     g.add_argument("--out", default="report.html")
@@ -139,5 +174,7 @@ def main(argv: list[str] | None = None) -> None:
     cfg = load_config(args.config)
     if args.cmd == "run":
         cmd_run(cfg, args.mock, args.judge, args.workers)
+    elif args.cmd == "diagnose":
+        cmd_diagnose(cfg)
     else:
         cmd_report(cfg, args.out, args.fragment)

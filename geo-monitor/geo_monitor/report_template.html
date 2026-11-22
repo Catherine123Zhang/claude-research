@@ -79,6 +79,22 @@ tr.own-row td { background: var(--accent-soft); }
 .wrap > *, .two > *, .three > * { min-width: 0; }
 .section-note { margin: -6px 0 12px; font-size: 13px; }
 .tag.new { background: var(--warn-soft); color: var(--warn); }
+.summary { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; margin: 0; max-width: 80ch; }
+.diag-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(440px, 100%), 1fr)); gap: 16px; }
+.diag-card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; display: grid; gap: 12px; min-width: 0; }
+.diag-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+.diag-head h3 { font-size: 15px; margin: 0; }
+.tier-badge { font-size: 12px; padding: 2px 10px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); white-space: nowrap; }
+.tier-badge.t2 { background: var(--line); color: var(--ink); }
+.tier-badge.t3, .tier-badge.none { background: var(--warn-soft); color: var(--warn); }
+.diag-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(180px, 100%), 1fr)); gap: 12px; }
+.diag-label { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+.diag-card p, .diag-card ul { margin: 0; font-size: 13px; }
+.diag-card ul { padding-left: 18px; }
+.tier-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.tier-chip { font-size: 12px; display: inline-flex; gap: 4px; align-items: center; }
+.tier-chip b { font-family: var(--font-num); font-weight: 500; font-size: 11px; padding: 0 4px; border-radius: 3px; background: var(--line); }
+.recs { margin: 0; padding-left: 20px; display: grid; gap: 6px; max-width: 80ch; }
 .three { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr)); gap: 28px; }
 footer { color: var(--muted); font-size: 13px; border-top: 1px solid var(--line); padding-top: 16px; }
 footer p { margin: 0 0 6px; max-width: 70ch; }
@@ -93,6 +109,7 @@ footer p { margin: 0 0 6px; max-width: 70ch; }
   </header>
 
   <section class="kpis" id="kpis" aria-label="总览"></section>
+  <p class="summary" id="summary" hidden></p>
 
   <section class="three">
     <div>
@@ -113,6 +130,17 @@ footer p { margin: 0 0 6px; max-width: 70ch; }
     <h2>品牌排行</h2>
     <p class="sub section-note" id="brand-note"></p>
     <div class="scroll"><table id="brand-table"></table></div>
+  </section>
+
+  <section>
+    <h2>各平台梯队与诊断</h2>
+    <p class="sub section-note" id="diag-note"></p>
+    <div class="diag-grid" id="diag"></div>
+  </section>
+
+  <section id="recs-wrap" hidden>
+    <h2>优化建议</h2>
+    <ol class="recs" id="recs"></ol>
   </section>
 
   <section>
@@ -199,6 +227,7 @@ function render() {
     : `<p class="sub">回答里没有引用来源。</p>`;
 
   renderBrands();
+  renderDiagnosis();
   renderArticles();
 
   // Platform filter chips
@@ -259,6 +288,41 @@ function renderBrands() {
       <td>${esc(b.name)}${b.own ? "（你）" : ""}${b.discovered ? ' <span class="tag new">新发现</span>' : ""}</td>
       ${heat(b.n, ok.length)}<td class="c num">${b.n ? (b.rankSum / b.n).toFixed(1) + " 名" : "—"}</td>
       ${DATA.platforms.map((p) => heat(b.per[p.id] || 0, perCount[p.id])).join("")}</tr>`).join("")}</tbody>`;
+}
+
+function renderDiagnosis() {
+  const diag = DATA.diagnosis;
+  const byId = Object.fromEntries((diag?.platforms || []).map((p) => [p.platform_id, p]));
+  $("summary").hidden = !diag?.summary;
+  if (diag?.summary) $("summary").textContent = diag.summary;
+  $("diag-note").textContent = "梯队按提及率和平均排名算分，以该平台最强的品牌为基准：达到 66% 为 T1，33% 为 T2，其余为 T3。"
+    + (diag ? "解释和建议由 Claude 根据统计数据撰写。" : "运行 python -m geo_monitor diagnose 可以让 Claude 补上每个平台的解释和建议。");
+  $("diag").innerHTML = DATA.platforms.map((p) => {
+    const st = DATA.stats[p.id];
+    if (!st) return "";
+    const own = st.own;
+    const tier = own.tier || "未进入";
+    const cls = tier === "T1" ? "" : tier === "T2" ? "t2" : tier === "T3" ? "t3" : "none";
+    const badge = tier.startsWith("T") ? `本品牌：第 ${tier.slice(1)} 梯队` : "本品牌：未被提到";
+    const comps = st.brands.filter((b) => !b.own && b.tier !== "—").slice(0, 6)
+      .map((b) => `<span class="tier-chip">${esc(b.name)}<b>${esc(b.tier)}</b></span>`).join("");
+    const d = byId[p.id];
+    const ownRate = Math.round((own.rate || 0) * 100);
+    return `<article class="diag-card">
+      <div class="diag-head"><h3>${esc(p.label)}</h3><span class="tier-badge ${cls}">${esc(badge)}</span></div>
+      <div class="diag-row">
+        <div><div class="diag-label">本品牌表现 · 提及率 ${ownRate}%${own.avg_rank ? ` · 平均第 ${own.avg_rank} 名` : ""}</div><div class="track"><div class="fill own" style="width:${Math.max(ownRate, 1)}%"></div></div></div>
+        <div><div class="diag-label">竞品梯队参照</div><div class="tier-chips">${comps || '<span class="sub">无</span>'}</div></div>
+      </div>
+      ${d ? `<div class="diag-row">
+        <div><div class="diag-label">平台差异解释</div><p>${esc(d.explanation)}</p></div>
+        <div><div class="diag-label">建议动作</div><ul>${d.actions.map((a) => `<li>${esc(a)}</li>`).join("")}</ul></div>
+      </div>` : ""}
+    </article>`;
+  }).join("");
+  const recs = diag?.recommendations || [];
+  $("recs-wrap").hidden = !recs.length;
+  $("recs").innerHTML = recs.map((r) => `<li>${esc(r)}</li>`).join("");
 }
 
 const ARTICLE_LIMIT = 15;
