@@ -106,7 +106,7 @@ def cmd_report(cfg: dict, out_path: str, fragment: bool) -> None:
         "mock": any(r.get("mock") for r in latest),
         "samples": cfg["samples"],
         "brand": cfg["brand"],
-        "brands": [{"name": b["name"], "own": b["own"]} for b in tracked_brands(cfg)],
+        "brands": [{"name": b["name"], "own": b["own"], "aliases": b["aliases"]} for b in tracked_brands(cfg)],
         "platforms": [{"id": p["id"], "label": p["label"]} for p in cfg["platforms"] if p["id"] in ran],
         "questions": [{"text": q["text"], "category": q.get("category", "")} for q in cfg["questions"]],
         "records": [{k: r.get(k) for k in ("platform", "q", "sample", "text", "citations", "queries",

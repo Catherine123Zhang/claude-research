@@ -77,6 +77,8 @@ tr.own-row td { background: var(--accent-soft); }
 .cite-table td, .cite-table th { padding: 5px 8px; }
 .cite-table a { color: var(--accent); overflow-wrap: anywhere; }
 .wrap > *, .two > *, .three > * { min-width: 0; }
+.section-note { margin: -6px 0 12px; font-size: 13px; }
+.tag.new { background: var(--warn-soft); color: var(--warn); }
 .three { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr)); gap: 28px; }
 footer { color: var(--muted); font-size: 13px; border-top: 1px solid var(--line); padding-top: 16px; }
 footer p { margin: 0 0 6px; max-width: 70ch; }
@@ -107,14 +109,17 @@ footer p { margin: 0 0 6px; max-width: 70ch; }
     </div>
   </section>
 
-  <section id="unseen-wrap" hidden>
-    <h2>你没监测、但 AI 提到了的品牌</h2>
-    <div class="bars" id="unseen"></div>
+  <section>
+    <h2>品牌排行</h2>
+    <p class="sub section-note" id="brand-note"></p>
+    <div class="scroll"><table id="brand-table"></table></div>
   </section>
 
   <section>
-    <h2>品牌对比</h2>
-    <div class="scroll"><table id="brand-table"></table></div>
+    <h2>被引用的文章</h2>
+    <p class="sub section-note">AI 回答时参考了哪些网页。引用次数高的文章，是值得去投稿、合作或模仿写法的渠道。</p>
+    <div class="scroll"><table id="article-table"></table></div>
+    <p class="sub" id="article-more"></p>
   </section>
 
   <section>
@@ -124,7 +129,7 @@ footer p { margin: 0 0 6px; max-width: 70ch; }
   </section>
 
   <footer>
-    <p><strong>提及率</strong>：回答里出现品牌名或别名的比例。<strong>排名</strong>：在同一条回答里，按出现先后排在第几个被监测品牌。<strong>被引用</strong>：AI 列出的参考来源里有你的域名。<strong>情感倾向</strong>和<strong>全部品牌</strong>由 Claude 阅读回答后判断（运行时加 --judge）。</p>
+    <p><strong>提及率</strong>：回答里出现品牌名或别名的比例。<strong>排名</strong>：在同一条回答里，按出现先后排第几个品牌。<strong>被引用</strong>：AI 列出的参考来源里有你的域名。<strong>情感倾向</strong>和<strong>全部品牌</strong>由 Claude 阅读回答后判断（运行时加 --judge）。</p>
     <p>同一个问题每次问，AI 的回答都会不同，所以每个问题会采样多次再取比例。API 返回的结果和 App 里看到的结果也可能不同。</p>
   </footer>
 </div>
@@ -193,33 +198,8 @@ function render() {
     ? types.map(([t, n]) => barRow(t, (n / maxT) * 100, `${pct(n, totalCites)}%`, t === "品牌官网")).join("")
     : `<p class="sub">回答里没有引用来源。</p>`;
 
-  // Brands the judge found that are not in the config
-  const known = new Set(DATA.brands.flatMap((b) => [b.name.toLowerCase()]));
-  (DATA.brand.aliases || []).forEach((a) => known.add(a.toLowerCase()));
-  const unseen = {};
-  ok.forEach((r) => (r.judge?.all_brands || []).forEach((n) => {
-    if (![...known].some((k) => n.toLowerCase().includes(k) || k.includes(n.toLowerCase()))) unseen[n] = (unseen[n] || 0) + 1;
-  }));
-  const unseenList = Object.entries(unseen).sort((a, b) => b[1] - a[1]).slice(0, 8);
-  $("unseen-wrap").hidden = !unseenList.length;
-  if (unseenList.length) {
-    const maxU = unseenList[0][1];
-    $("unseen").innerHTML = unseenList.map(([n, c]) => barRow(n, (c / maxU) * 100, `${c} 次`, false)).join("");
-  }
-
-  // Brand x platform grid
-  const head = `<tr><th>品牌</th>${DATA.platforms.map((p) => `<th class="c">${esc(p.label)}</th>`).join("")}<th class="c">合计</th></tr>`;
-  const rows = DATA.brands.map((b) => {
-    const cell = (rs) => {
-      const n = rs.filter((r) => r.analysis.brands.find((x) => x.name === b.name)?.mentioned).length;
-      const v = pct(n, rs.length);
-      const alpha = Math.round(v * 0.6);
-      return `<td class="c"><span class="cell" style="background: color-mix(in srgb, var(--accent) ${alpha}%, transparent)">${rs.length ? v + "%" : "—"}</span></td>`;
-    };
-    const perPlatform = DATA.platforms.map((p) => cell(ok.filter((r) => r.platform === p.id))).join("");
-    return `<tr class="${b.own ? "own-row" : ""}"><td>${esc(b.name)}${b.own ? "（你）" : ""}</td>${perPlatform}${cell(ok)}</tr>`;
-  }).join("");
-  $("brand-table").innerHTML = `<thead>${head}</thead><tbody>${rows}</tbody>`;
+  renderBrands();
+  renderArticles();
 
   // Platform filter chips
   const chipDefs = [{ id: "all", label: "全部平台" }, ...DATA.platforms];
@@ -231,6 +211,90 @@ function render() {
     renderQuestions(btn.dataset.id);
   });
   renderQuestions("all");
+}
+
+// Canonical brand name for a name the AI used: a tracked brand if an alias matches, else the name itself.
+function canonical(name) {
+  const n = name.toLowerCase();
+  for (const b of DATA.brands) {
+    const aliases = [b.name, ...(b.aliases || [])].map((a) => a.toLowerCase());
+    if (aliases.some((a) => n === a || n.includes(a) || a.includes(n))) return b.name;
+  }
+  return name;
+}
+
+// Brands one answer mentions, with their rank. Uses the judge's full list when present.
+function brandHits(r) {
+  const hits = new Map();
+  if (r.judge?.all_brands?.length) {
+    r.judge.all_brands.forEach((n) => { const c = canonical(n); if (!hits.has(c)) hits.set(c, hits.size + 1); });
+  } else {
+    r.analysis.brands.filter((b) => b.mentioned).forEach((b) => hits.set(b.name, b.rank));
+  }
+  return hits;
+}
+
+function renderBrands() {
+  const tracked = new Set(DATA.brands.map((b) => b.name));
+  const stats = new Map(DATA.brands.map((b) => [b.name, { name: b.name, own: b.own, n: 0, rankSum: 0, per: {} }]));
+  ok.forEach((r) => brandHits(r).forEach((rank, name) => {
+    if (!stats.has(name)) stats.set(name, { name, own: false, n: 0, rankSum: 0, per: {}, discovered: true });
+    const st = stats.get(name);
+    st.n++; st.rankSum += rank; st.per[r.platform] = (st.per[r.platform] || 0) + 1;
+  }));
+  const list = [...stats.values()].filter((b) => b.n > 0 || tracked.has(b.name)).sort((a, b) => b.n - a.n || a.rankSum / (a.n || 1) - b.rankSum / (b.n || 1));
+  const anyJudge = ok.some((r) => r.judge?.all_brands);
+  $("brand-note").textContent = anyJudge
+    ? "包括你没设为竞品、但 AI 提到了的品牌（标“新发现”）。排名按同一条回答里被提到的先后计算。"
+    : "只统计配置里的品牌。运行时加 --judge，可以把 AI 提到的其他品牌也找出来。";
+  const perCount = Object.fromEntries(DATA.platforms.map((p) => [p.id, ok.filter((r) => r.platform === p.id).length]));
+  const head = `<tr><th class="c">#</th><th>品牌</th><th class="c">提及率</th><th class="c">平均排名</th>${DATA.platforms.map((p) => `<th class="c">${esc(p.label)}</th>`).join("")}</tr>`;
+  const heat = (v, total) => {
+    if (!total) return `<td class="c">—</td>`;
+    const p = pct(v, total);
+    return `<td class="c"><span class="cell" style="background: color-mix(in srgb, var(--accent) ${Math.round(p * 0.6)}%, transparent)">${p}%</span></td>`;
+  };
+  $("brand-table").innerHTML = `<thead>${head}</thead><tbody>${list.map((b, i) => `
+    <tr class="${b.own ? "own-row" : ""}"><td class="c num">${i + 1}</td>
+      <td>${esc(b.name)}${b.own ? "（你）" : ""}${b.discovered ? ' <span class="tag new">新发现</span>' : ""}</td>
+      ${heat(b.n, ok.length)}<td class="c num">${b.n ? (b.rankSum / b.n).toFixed(1) + " 名" : "—"}</td>
+      ${DATA.platforms.map((p) => heat(b.per[p.id] || 0, perCount[p.id])).join("")}</tr>`).join("")}</tbody>`;
+}
+
+const ARTICLE_LIMIT = 15;
+
+function renderArticles() {
+  const arts = new Map();
+  ok.forEach((r, ri) => (r.citations || []).forEach((c, i) => {
+    const key = c.url || c.title;
+    if (!key) return;
+    if (!arts.has(key)) arts.set(key, { url: c.url, title: c.title || c.url, domain: r.analysis.domains[i] || "", type: r.analysis.site_types?.[i] || "", refs: [] });
+    arts.get(key).refs.push(ri);
+  }));
+  const list = [...arts.values()].sort((a, b) => b.refs.length - a.refs.length);
+  const head = `<thead><tr><th>文章</th><th>站点</th><th>站点类型</th><th>引用平台</th><th class="c">AI 问题</th><th class="c">引用次数</th></tr></thead>`;
+  const rows = list.slice(0, ARTICLE_LIMIT).map((a, ai) => {
+    const recs = a.refs.map((ri) => ok[ri]);
+    const plats = [...new Set(recs.map((r) => r.platform))].map((p) => `<span class="tag">${esc(platformLabel[p] || p)}</span>`).join(" ");
+    const qs = new Set(recs.map((r) => r.q)).size;
+    const detail = recs.map((r) => {
+      const hits = [...brandHits(r).keys()].map((n) => `<span class="tag ${n === ownName ? "own" : ""}">${esc(n)}</span>`).join(" ");
+      return `<tr><td>${esc(DATA.questions[r.q].text)}</td><td style="white-space:nowrap">${esc(platformLabel[r.platform] || r.platform)} · 第 ${r.sample + 1} 次</td><td style="white-space:nowrap">${esc(DATA.questions[r.q].category || "")}</td><td>${hits || '<span class="sub">无</span>'}</td><td class="c num">${(r.citations || []).length}</td></tr>`;
+    }).join("");
+    return `<tr><td><button type="button" class="q-toggle" id="a-${ai}" aria-expanded="false" aria-controls="ad-${ai}">${esc(a.title)}</button>
+        ${a.url ? `<a class="sub" style="font-size:12px;color:var(--accent)" href="${esc(a.url)}" target="_blank" rel="noopener">查看原文</a>` : ""}</td>
+      <td>${esc(a.domain)}</td><td><span class="pill ${a.type === "品牌官网" ? "yes" : "no"}">${esc(a.type)}</span></td><td>${plats}</td>
+      <td class="c num">${qs}</td><td class="c num">${a.refs.length}</td></tr>
+      <tr class="detail" id="ad-${ai}" hidden><td colspan="6"><div class="scroll"><table class="cite-table">
+        <thead><tr><th>AI 问题</th><th>对话平台</th><th>问题类型</th><th>提及品牌</th><th class="c">引用来源数</th></tr></thead><tbody>${detail}</tbody></table></div></td></tr>`;
+  }).join("");
+  $("article-table").innerHTML = list.length ? head + `<tbody>${rows}</tbody>` : `<tbody><tr><td class="sub">回答里没有引用来源。</td></tr></tbody>`;
+  $("article-more").textContent = list.length > ARTICLE_LIMIT ? `共 ${list.length} 篇，这里显示引用次数最多的 ${ARTICLE_LIMIT} 篇。` : "";
+  $("article-table").querySelectorAll(".q-toggle").forEach((btn) => btn.addEventListener("click", () => {
+    const open = btn.getAttribute("aria-expanded") !== "true";
+    btn.setAttribute("aria-expanded", String(open));
+    $(btn.getAttribute("aria-controls")).hidden = !open;
+  }));
 }
 
 function sentimentTile(mentioned) {
