@@ -1,0 +1,305 @@
+<title>AI 搜索可见度</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&family=IBM+Plex+Mono:wght@500&display=swap">
+<style>
+/* Layout: one reading column; summary tiles, then two charts side by side, then the brand grid and per-question detail. */
+:root {
+  --bg: #f3f5f4; --surface: #ffffff; --ink: #14211f; --muted: #5d6b68; --line: #dbe2e0;
+  --accent: #0e7c6b; --accent-soft: #d3ece6; --warn: #b45309; --warn-soft: #fdecd3; --bar: #9fb3ae;
+  --font-body: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  --font-num: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0f1615; --surface: #172120; --ink: #e5eeec; --muted: #93a5a1; --line: #2a3735;
+  --accent: #3cc3a9; --accent-soft: #173a34; --warn: #f0a44b; --warn-soft: #3a2a14; --bar: #4b5f5b; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #0f1615; --surface: #172120; --ink: #e5eeec; --muted: #93a5a1; --line: #2a3735;
+  --accent: #3cc3a9; --accent-soft: #173a34; --warn: #f0a44b; --warn-soft: #3a2a14; --bar: #4b5f5b; color-scheme: dark }
+body { background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.6; }
+.wrap { max-width: 1080px; margin: 0 auto; padding-block: 28px 56px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: grid; gap: 28px; }
+h1 { font-size: clamp(22px, 4vw, 30px); line-height: 1.3; margin: 4px 0 6px; text-wrap: balance; font-weight: 700; }
+h2 { font-size: 17px; margin: 0 0 12px; font-weight: 700; }
+.eyebrow { font-size: 12px; letter-spacing: .08em; color: var(--muted); text-transform: uppercase; }
+.sub { color: var(--muted); margin: 0; }
+.num { font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+.banner { background: var(--warn-soft); color: var(--warn); border-radius: 8px; padding: 10px 14px; font-size: 14px; margin-top: 12px; }
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr)); gap: 12px; }
+.kpi { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; display: grid; gap: 2px; }
+.kpi .label { color: var(--muted); font-size: 13px; }
+.kpi .value { font-family: var(--font-num); font-size: 30px; line-height: 1.2; }
+.kpi .note { color: var(--muted); font-size: 12px; }
+.kpi.own .value { color: var(--accent); }
+.two { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 28px; }
+.bars { display: grid; gap: 8px; }
+.bar-row { display: grid; grid-template-columns: minmax(80px, 34%) 1fr 48px; gap: 10px; align-items: center; font-size: 14px; }
+.bar-row .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.track { height: 10px; background: var(--line); border-radius: 5px; overflow: hidden; }
+.fill { height: 100%; background: var(--bar); border-radius: 5px; }
+.fill.own { background: var(--accent); }
+.bar-row .val { text-align: right; font-family: var(--font-num); font-size: 13px; color: var(--muted); }
+.scroll { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 14px; }
+th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { color: var(--muted); font-weight: 500; font-size: 13px; white-space: nowrap; }
+td.c, th.c { text-align: center; }
+tr.own-row td { background: var(--accent-soft); }
+.cell { font-family: var(--font-num); font-size: 13px; display: inline-block; min-width: 46px; padding: 2px 6px; border-radius: 5px; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.chip { border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 999px; padding: 5px 12px; font: inherit; font-size: 13px; cursor: pointer; }
+.chip[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.chip:focus-visible, .q-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.q-toggle { all: unset; cursor: pointer; display: block; font-weight: 500; }
+.q-toggle::before { content: "▸ "; color: var(--muted); }
+.q-toggle[aria-expanded="true"]::before { content: "▾ "; }
+.cat { font-size: 12px; color: var(--muted); }
+.pill { font-size: 12px; padding: 1px 8px; border-radius: 999px; white-space: nowrap; }
+.pill.yes { background: var(--accent-soft); color: var(--accent); }
+.pill.no { background: var(--line); color: var(--muted); }
+.detail td { background: var(--bg); }
+.answers { display: grid; gap: 12px; }
+.answer { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; min-width: 0; }
+.answer-head { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 13px; color: var(--muted); margin-bottom: 8px; }
+.answer-text { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14px; max-height: 260px; overflow-y: auto; }
+.answer-text mark { background: var(--accent-soft); color: var(--accent); padding: 0 2px; border-radius: 3px; }
+.cites { margin: 10px 0 0; padding-left: 18px; font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
+.cites a { color: var(--accent); }
+.err { color: var(--warn); font-size: 13px; }
+.meta-line { display: flex; flex-wrap: wrap; gap: 6px; align-items: baseline; font-size: 13px; margin: 8px 0 0; }
+.meta-line > span:first-child { color: var(--muted); min-width: 64px; }
+.tag { font-size: 12px; padding: 1px 8px; border-radius: 5px; background: var(--line); color: var(--ink); }
+.tag.own { background: var(--accent); color: var(--surface); }
+.tag.q { background: transparent; border: 1px dashed var(--bar); color: var(--muted); }
+.pill.neg { background: var(--warn-soft); color: var(--warn); }
+.cite-table { font-size: 13px; margin-top: 8px; }
+.cite-table td, .cite-table th { padding: 5px 8px; }
+.cite-table a { color: var(--accent); overflow-wrap: anywhere; }
+.wrap > *, .two > *, .three > * { min-width: 0; }
+.three { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr)); gap: 28px; }
+footer { color: var(--muted); font-size: 13px; border-top: 1px solid var(--line); padding-top: 16px; }
+footer p { margin: 0 0 6px; max-width: 70ch; }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow" id="eyebrow">GEO 监测</div>
+    <h1 id="headline">品牌在 AI 回答里的可见度</h1>
+    <p class="sub" id="scope"></p>
+    <div class="banner" id="mock-banner" hidden>这是示例数据：回答由离线模拟器生成，用来演示看板。接上各平台 API Key 后重新运行，看到的才是真实结果。</div>
+  </header>
+
+  <section class="kpis" id="kpis" aria-label="总览"></section>
+
+  <section class="three">
+    <div>
+      <h2>各平台提及率</h2>
+      <div class="bars" id="by-platform"></div>
+    </div>
+    <div>
+      <h2>AI 最常引用的网站</h2>
+      <div class="bars" id="by-domain"></div>
+    </div>
+    <div>
+      <h2>引用来源类型</h2>
+      <div class="bars" id="by-type"></div>
+    </div>
+  </section>
+
+  <section id="unseen-wrap" hidden>
+    <h2>你没监测、但 AI 提到了的品牌</h2>
+    <div class="bars" id="unseen"></div>
+  </section>
+
+  <section>
+    <h2>品牌对比</h2>
+    <div class="scroll"><table id="brand-table"></table></div>
+  </section>
+
+  <section>
+    <h2>问题明细</h2>
+    <div class="chips" id="chips" role="group" aria-label="按平台筛选"></div>
+    <div class="scroll"><table id="q-table"></table></div>
+  </section>
+
+  <footer>
+    <p><strong>提及率</strong>：回答里出现品牌名或别名的比例。<strong>排名</strong>：在同一条回答里，按出现先后排在第几个被监测品牌。<strong>被引用</strong>：AI 列出的参考来源里有你的域名。<strong>情感倾向</strong>和<strong>全部品牌</strong>由 Claude 阅读回答后判断（运行时加 --judge）。</p>
+    <p>同一个问题每次问，AI 的回答都会不同，所以每个问题会采样多次再取比例。API 返回的结果和 App 里看到的结果也可能不同。</p>
+  </footer>
+</div>
+
+<script>
+const DATA = /*__DATA__*/null;
+
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const pct = (a, b) => (b ? Math.round((a / b) * 100) : 0);
+const ownName = DATA.brand.name;
+const platformLabel = Object.fromEntries(DATA.platforms.map((p) => [p.id, p.label]));
+const ok = DATA.records.filter((r) => !r.error);
+const ownOf = (r) => r.analysis.brands.find((b) => b.own);
+
+function render() {
+  const runDate = DATA.run_id.replace("T", " ").slice(0, 16);
+  $("eyebrow").textContent = `GEO 监测 · ${runDate}`;
+  $("headline").textContent = `${ownName} 在 AI 回答里的可见度`;
+  const failed = DATA.records.length - ok.length;
+  $("scope").textContent = `${DATA.questions.length} 个问题 × ${DATA.platforms.length} 个平台 × 每题 ${DATA.samples} 次采样，共 ${ok.length} 条有效回答` + (failed ? `（${failed} 条请求失败）` : "");
+  $("mock-banner").hidden = !DATA.mock;
+
+  // KPI tiles
+  const mentioned = ok.filter((r) => ownOf(r).mentioned);
+  const ranks = mentioned.map((r) => ownOf(r).rank);
+  const avgRank = ranks.length ? (ranks.reduce((a, b) => a + b, 0) / ranks.length).toFixed(1) : "—";
+  const cited = ok.filter((r) => ownOf(r).site_cited).length;
+  const compRates = DATA.brands.filter((b) => !b.own).map((b) => ({
+    name: b.name, n: ok.filter((r) => r.analysis.brands.find((x) => x.name === b.name)?.mentioned).length,
+  })).sort((a, b) => b.n - a.n);
+  const top = compRates[0];
+  $("kpis").innerHTML = [
+    { cls: "own", label: "品牌提及率", value: `${pct(mentioned.length, ok.length)}%`, note: `${mentioned.length} / ${ok.length} 条回答提到 ${ownName}` },
+    { cls: "own", label: "平均排名", value: avgRank, note: "只算提到你的回答，1 = 第一个被提到" },
+    { cls: "own", label: "官网被 AI 引用", value: `${pct(cited, ok.length)}%`, note: `${cited} 条回答的参考来源里有你的网站` },
+    { cls: "", label: "提及最多的竞品", value: top ? `${pct(top.n, ok.length)}%` : "—", note: top ? top.name : "未配置竞品" },
+    sentimentTile(mentioned),
+  ].filter(Boolean).map((k) => `<div class="kpi ${k.cls}"><span class="label">${esc(k.label)}</span><span class="value">${esc(k.value)}</span><span class="note">${esc(k.note)}</span></div>`).join("");
+
+  // Per-platform mention rate
+  $("by-platform").innerHTML = DATA.platforms.map((p) => {
+    const rs = ok.filter((r) => r.platform === p.id);
+    const n = rs.filter((r) => ownOf(r).mentioned).length;
+    const v = pct(n, rs.length);
+    return barRow(p.label, v, `${v}%`, true);
+  }).join("");
+
+  // Top cited domains (share of answers that cite each domain at least once)
+  const domainCount = {};
+  ok.forEach((r) => new Set(r.analysis.domains.filter(Boolean)).forEach((d) => (domainCount[d] = (domainCount[d] || 0) + 1)));
+  const ownDomains = DATA.brand.domains || [];
+  const domains = Object.entries(domainCount).sort((a, b) => b[1] - a[1]).slice(0, 10);
+  const maxD = domains.length ? domains[0][1] : 1;
+  $("by-domain").innerHTML = domains.length
+    ? domains.map(([d, n]) => barRow(d, (n / maxD) * 100, `${pct(n, ok.length)}%`, ownDomains.some((o) => d === o || d.endsWith("." + o)))).join("")
+    : `<p class="sub">回答里没有引用来源。</p>`;
+
+  // Citation site types (share of all citations)
+  const typeCount = {};
+  let totalCites = 0;
+  ok.forEach((r) => (r.analysis.site_types || []).forEach((t) => { typeCount[t] = (typeCount[t] || 0) + 1; totalCites++; }));
+  const types = Object.entries(typeCount).sort((a, b) => b[1] - a[1]);
+  const maxT = types.length ? types[0][1] : 1;
+  $("by-type").innerHTML = types.length
+    ? types.map(([t, n]) => barRow(t, (n / maxT) * 100, `${pct(n, totalCites)}%`, t === "品牌官网")).join("")
+    : `<p class="sub">回答里没有引用来源。</p>`;
+
+  // Brands the judge found that are not in the config
+  const known = new Set(DATA.brands.flatMap((b) => [b.name.toLowerCase()]));
+  (DATA.brand.aliases || []).forEach((a) => known.add(a.toLowerCase()));
+  const unseen = {};
+  ok.forEach((r) => (r.judge?.all_brands || []).forEach((n) => {
+    if (![...known].some((k) => n.toLowerCase().includes(k) || k.includes(n.toLowerCase()))) unseen[n] = (unseen[n] || 0) + 1;
+  }));
+  const unseenList = Object.entries(unseen).sort((a, b) => b[1] - a[1]).slice(0, 8);
+  $("unseen-wrap").hidden = !unseenList.length;
+  if (unseenList.length) {
+    const maxU = unseenList[0][1];
+    $("unseen").innerHTML = unseenList.map(([n, c]) => barRow(n, (c / maxU) * 100, `${c} 次`, false)).join("");
+  }
+
+  // Brand x platform grid
+  const head = `<tr><th>品牌</th>${DATA.platforms.map((p) => `<th class="c">${esc(p.label)}</th>`).join("")}<th class="c">合计</th></tr>`;
+  const rows = DATA.brands.map((b) => {
+    const cell = (rs) => {
+      const n = rs.filter((r) => r.analysis.brands.find((x) => x.name === b.name)?.mentioned).length;
+      const v = pct(n, rs.length);
+      const alpha = Math.round(v * 0.6);
+      return `<td class="c"><span class="cell" style="background: color-mix(in srgb, var(--accent) ${alpha}%, transparent)">${rs.length ? v + "%" : "—"}</span></td>`;
+    };
+    const perPlatform = DATA.platforms.map((p) => cell(ok.filter((r) => r.platform === p.id))).join("");
+    return `<tr class="${b.own ? "own-row" : ""}"><td>${esc(b.name)}${b.own ? "（你）" : ""}</td>${perPlatform}${cell(ok)}</tr>`;
+  }).join("");
+  $("brand-table").innerHTML = `<thead>${head}</thead><tbody>${rows}</tbody>`;
+
+  // Platform filter chips
+  const chipDefs = [{ id: "all", label: "全部平台" }, ...DATA.platforms];
+  $("chips").innerHTML = chipDefs.map((c) => `<button type="button" class="chip" id="chip-${esc(c.id)}" data-id="${esc(c.id)}" aria-pressed="${c.id === "all"}">${esc(c.label)}</button>`).join("");
+  $("chips").addEventListener("click", (e) => {
+    const btn = e.target.closest(".chip");
+    if (!btn) return;
+    $("chips").querySelectorAll(".chip").forEach((b) => b.setAttribute("aria-pressed", String(b === btn)));
+    renderQuestions(btn.dataset.id);
+  });
+  renderQuestions("all");
+}
+
+function sentimentTile(mentioned) {
+  const judged = mentioned.filter((r) => r.judge && r.judge.sentiment && r.judge.sentiment !== "未提及");
+  if (!judged.length) return null;
+  const c = { 正面: 0, 中性: 0, 负面: 0 };
+  judged.forEach((r) => (c[r.judge.sentiment] = (c[r.judge.sentiment] || 0) + 1));
+  return { cls: "", label: "正面评价占比", value: `${pct(c.正面, judged.length)}%`, note: `正面 ${c.正面} · 中性 ${c.中性} · 负面 ${c.负面}（提到你的回答）` };
+}
+
+function sentimentPill(r) {
+  const s = r.judge?.sentiment;
+  if (!s || s === "未提及") return "";
+  return `<span class="pill ${s === "负面" ? "neg" : s === "正面" ? "yes" : "no"}">${esc(s)}</span>`;
+}
+
+function barRow(name, widthPct, label, own) {
+  return `<div class="bar-row"><span class="name" title="${esc(name)}">${esc(name)}</span><div class="track"><div class="fill ${own ? "own" : ""}" style="width:${Math.max(widthPct, 1)}%"></div></div><span class="val">${esc(label)}</span></div>`;
+}
+
+function highlight(text) {
+  let html = esc(String(text ?? "").replace(/\*\*/g, "").replace(/^#{1,6}\s*/gm, ""));
+  const aliases = (DATA.brand.aliases || [ownName]).filter(Boolean).sort((a, b) => b.length - a.length);
+  aliases.forEach((a) => {
+    const re = new RegExp(esc(a).replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi");
+    html = html.replace(re, (m) => `<mark>${m}</mark>`);
+  });
+  return html;
+}
+
+function renderQuestions(platformId) {
+  const recs = DATA.records.filter((r) => platformId === "all" || r.platform === platformId);
+  const head = `<thead><tr><th>问题</th><th class="c">提及</th><th class="c">平均排名</th><th class="c">引用网站</th><th class="c">官网被引</th></tr></thead>`;
+  const body = DATA.questions.map((q, qi) => {
+    const rs = recs.filter((r) => r.q === qi);
+    const good = rs.filter((r) => !r.error);
+    const m = good.filter((r) => ownOf(r).mentioned);
+    const ranks = m.map((r) => ownOf(r).rank);
+    const avg = ranks.length ? (ranks.reduce((a, b) => a + b, 0) / ranks.length).toFixed(1) : "—";
+    const doms = new Set(good.flatMap((r) => r.analysis.domains.filter(Boolean))).size;
+    const citedN = good.filter((r) => ownOf(r).site_cited).length;
+    const answers = rs.map((r) => {
+      const own = r.error ? null : ownOf(r);
+      const status = r.error ? `<span class="err">请求失败：${esc(r.error)}</span>`
+        : own.mentioned ? `<span class="pill yes">提到 · 第 ${own.rank} 位</span>` : `<span class="pill no">未提到</span>`;
+      const types = r.analysis?.site_types || [];
+      const domains = r.analysis?.domains || [];
+      const cites = (r.citations || []).map((c, i) => `<tr><td class="num">${i + 1}</td><td><a href="${esc(c.url)}" target="_blank" rel="noopener">${esc(c.title || domains[i] || c.url)}</a></td><td>${esc(domains[i] || "")}</td><td>${esc(types[i] || "")}</td></tr>`).join("");
+      const ownAliases = (DATA.brand.aliases || [ownName]).map((a) => a.toLowerCase());
+      const allBrands = (r.judge?.all_brands || []).map((n) => `<span class="tag ${ownAliases.some((a) => n.toLowerCase().includes(a)) ? "own" : ""}">${esc(n)}</span>`).join("");
+      const queries = (r.queries || []).map((q) => `<span class="tag q">${esc(q)}</span>`).join("");
+      return `<div class="answer"><div class="answer-head"><strong>${esc(platformLabel[r.platform] || r.platform)}</strong><span>第 ${r.sample + 1} 次</span>${status}${r.error ? "" : sentimentPill(r)}</div>
+        ${queries ? `<div class="meta-line"><span>搜索关键词</span>${queries}</div>` : ""}
+        ${allBrands ? `<div class="meta-line"><span>提及品牌 ${r.judge.all_brands.length}</span>${allBrands}</div>` : ""}
+        ${r.error ? "" : `<div class="answer-text" style="margin-top:10px">${highlight(r.text)}</div>`}
+        ${cites ? `<div class="scroll"><table class="cite-table"><thead><tr><th>#</th><th>引用来源</th><th>站点</th><th>站点类型</th></tr></thead><tbody>${cites}</tbody></table></div>` : ""}</div>`;
+    }).join("");
+    return `<tr><td><button type="button" class="q-toggle" id="q-${qi}" aria-expanded="false" aria-controls="qd-${qi}">${esc(q.text)}</button><span class="cat">${esc(q.category || "")}</span></td>
+      <td class="c num">${m.length}/${good.length}</td><td class="c num">${avg}</td><td class="c num">${doms}</td>
+      <td class="c"><span class="pill ${citedN ? "yes" : "no"}">${citedN ? citedN + " 次" : "没有"}</span></td></tr>
+      <tr class="detail" id="qd-${qi}" hidden><td colspan="5"><div class="answers">${answers || '<p class="sub">这个平台没有这道题的结果。</p>'}</div></td></tr>`;
+  }).join("");
+  $("q-table").innerHTML = head + `<tbody>${body}</tbody>`;
+  $("q-table").querySelectorAll(".q-toggle").forEach((btn) => btn.addEventListener("click", () => {
+    const open = btn.getAttribute("aria-expanded") !== "true";
+    btn.setAttribute("aria-expanded", String(open));
+    $(btn.getAttribute("aria-controls")).hidden = !open;
+  }));
+}
+
+render();
+</script>
