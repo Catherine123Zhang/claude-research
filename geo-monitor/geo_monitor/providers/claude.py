@@ -9,13 +9,17 @@ MAX_CONTINUATIONS = 5
 
 
 class ClaudeProvider:
-    def __init__(self, model: str = "claude-opus-5-5", max_searches: int = 5):
+    def __init__(self, model: str = "claude-opus-5-5", max_searches: int = 5, region: str | None = None):
         self.model = model
         self.max_searches = max_searches
+        self.region = region
         self.client = anthropic.Anthropic()  # reads ANTHROPIC_API_KEY or an `ant auth login` profile
 
     def ask(self, question: str) -> Answer:
-        tools = [{"type": "web_search_20260209", "name": "web_search", "max_uses": self.max_searches}]
+        search = {"type": "web_search_20260209", "name": "web_search", "max_uses": self.max_searches}
+        if self.region:
+            search["user_location"] = {"type": "approximate", "country": self.region}
+        tools = [search]
         messages = [{"role": "user", "content": question}]
         try:
             for _ in range(MAX_CONTINUATIONS):

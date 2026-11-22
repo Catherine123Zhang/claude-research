@@ -75,7 +75,7 @@ tr.own-row td { background: var(--accent-soft); }
 .err { color: var(--warn); font-size: 13px; }
 .meta-line { display: flex; flex-wrap: wrap; gap: 6px; align-items: baseline; font-size: 13px; margin: 8px 0 0; }
 .meta-line > span:first-child { color: var(--muted); min-width: 64px; }
-.tag { font-size: 12px; padding: 1px 8px; border-radius: 5px; background: var(--line); color: var(--ink); }
+.tag { font-size: 12px; padding: 1px 8px; border-radius: 5px; background: var(--line); color: var(--ink); display: inline-block; white-space: nowrap; margin: 1px 0; }
 .tag.own { background: var(--accent); color: var(--surface); }
 .tag.q { background: transparent; border: 1px dashed var(--bar); color: var(--muted); }
 .pill.neg { background: var(--warn-soft); color: var(--warn); }
@@ -127,6 +127,32 @@ tr.own-row td { background: var(--accent-soft); }
 .tip { position: absolute; pointer-events: none; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font-size: 12px; box-shadow: 0 4px 14px rgb(0 0 0 / 0.12); min-width: 150px; }
 .tip div { display: flex; justify-content: space-between; gap: 12px; }
 .tip i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+.brandbar { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--muted); margin-bottom: 14px; }
+.brandbar img { height: 28px; width: auto; max-width: 160px; object-fit: contain; }
+.market-tabs { display: flex; flex-wrap: wrap; gap: 8px; border-bottom: 1px solid var(--line); padding-bottom: 12px; }
+.market-tabs button { font: inherit; font-size: 15px; font-weight: 500; padding: 7px 16px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); cursor: pointer; }
+.market-tabs button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--surface); }
+.market-tabs button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.delta { font-size: 12px; color: var(--muted); font-family: var(--font-num); }
+.delta .up { color: var(--accent); }
+.delta .down { color: var(--warn); }
+.scatter-svg { width: 100%; height: auto; display: block; overflow: visible; }
+.scatter-svg text { font-size: 11px; fill: var(--muted); font-family: var(--font-body); }
+.scatter-svg .lbl { font-size: 12px; fill: var(--ink); }
+.scatter-svg .lbl.own { font-weight: 700; }
+.scatter-svg .grid { stroke: var(--line); stroke-width: 1; }
+.agency-foot { display: flex; flex-wrap: wrap; gap: 6px 16px; }
+@media print {
+  :root { --bg: #ffffff; }
+  body { background: #ffffff; }
+  .wrap { max-width: none; gap: 20px; }
+  .market-tabs, .chips, #heat-chips, .q-toggle::before, .tip, #article-more { display: none !important; }
+  .detail { display: none !important; }
+  .kpi, .diag-card, .rec, .summary, tr { break-inside: avoid; }
+  section { break-inside: auto; }
+  h2 { break-after: avoid; }
+  .scroll { overflow: visible; }
+}
 .three { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr)); gap: 28px; }
 footer { color: var(--muted); font-size: 13px; border-top: 1px solid var(--line); padding-top: 16px; }
 footer p { margin: 0 0 6px; max-width: 70ch; }
@@ -134,11 +160,20 @@ footer p { margin: 0 0 6px; max-width: 70ch; }
 
 <div class="wrap">
   <header>
+    <div class="brandbar" id="brandbar" hidden><img id="agency-logo" alt="" hidden><span id="agency-name"></span></div>
     <div class="eyebrow" id="eyebrow">GEO 监测</div>
-    <h1 id="headline">品牌在 AI 回答里的可见度</h1>
+    <h1 id="headline">AI 搜索可见度报告</h1>
     <p class="sub" id="scope"></p>
     <div class="banner" id="mock-banner" hidden>这是示例数据：回答由离线模拟器生成，用来演示看板。接上各平台 API Key 后重新运行，看到的才是真实结果。</div>
   </header>
+
+  <section id="market-compare-wrap" hidden>
+    <h2>市场对比</h2>
+    <p class="sub section-note">各市场最近一次监测的核心指标。点下面的市场按钮查看该市场的完整数据。</p>
+    <div class="scroll"><table class="metric-table" id="market-compare"></table></div>
+  </section>
+
+  <nav class="market-tabs" id="market-tabs" aria-label="选择市场" hidden></nav>
 
   <section class="kpis" id="kpis" aria-label="总览"></section>
   <p class="summary" id="summary" hidden></p>
@@ -186,6 +221,12 @@ footer p { margin: 0 0 6px; max-width: 70ch; }
   </section>
 
   <section>
+    <h2>品牌竞争位置</h2>
+    <p class="sub section-note">横轴是提及率，纵轴是平均排名（越靠上越早被提到），圆越大被提到的次数越多。越靠右上角，在 AI 回答里越有竞争力。</p>
+    <svg class="scatter-svg" id="scatter" role="img" aria-label="各品牌提及率与平均排名"></svg>
+  </section>
+
+  <section>
     <h2>各平台梯队与诊断</h2>
     <p class="sub section-note" id="diag-note"></p>
     <div class="diag-grid" id="diag"></div>
@@ -194,6 +235,12 @@ footer p { margin: 0 0 6px; max-width: 70ch; }
   <section id="recs-wrap" hidden>
     <h2>优化建议</h2>
     <ol class="recs" id="recs"></ol>
+  </section>
+
+  <section>
+    <h2>内容缺口与选题</h2>
+    <p class="sub section-note" id="gap-note"></p>
+    <div class="scroll"><table id="gap-table"></table></div>
   </section>
 
   <section>
@@ -219,27 +266,84 @@ footer p { margin: 0 0 6px; max-width: 70ch; }
   <footer>
     <p><strong>提及率</strong>：回答里出现品牌名或别名的比例。<strong>SOV</strong>（声量份额）：每条回答里每个品牌记一次，你被提到的次数占所有品牌被提到次数的比例。<strong>Top1 / Top3 提及率</strong>：你排第一 / 排前三的回答占全部回答的比例。<strong>排名</strong>：在同一条回答里，按出现先后排第几个品牌。<strong>被引用</strong>：AI 列出的参考来源里有你的域名。<strong>情感倾向</strong>和<strong>全部品牌</strong>由 Claude 阅读回答后判断（运行时加 --judge）。</p>
     <p>同一个问题每次问，AI 的回答都会不同，所以每个问题会采样多次再取比例。API 返回的结果和 App 里看到的结果也可能不同。</p>
+    <p class="agency-foot" id="agency-foot"></p>
   </footer>
 </div>
 
 <script>
-const DATA = /*__DATA__*/null;
+const BASE = /*__DATA__*/null;
+let DATA, platformLabel, ok;
+const ownName = BASE.brand.name;
+// Run fn with DATA pointing at another market (brand aliases differ per market).
+function withMarket(mk, fn) {
+  const saved = DATA;
+  DATA = { ...mk, brand: BASE.brand };
+  try { return fn(); } finally { DATA = saved; }
+}
+const REGIONS = { US: "美国", GB: "英国", DE: "德国", FR: "法国", VN: "越南", TH: "泰国", ID: "印尼", MY: "马来西亚", PH: "菲律宾",
+  IN: "印度", AE: "阿联酋", SA: "沙特", BR: "巴西", MX: "墨西哥", RU: "俄罗斯", JP: "日本", KR: "韩国", AU: "澳大利亚", CA: "加拿大" };
+const regionName = (c) => (c ? REGIONS[c] || c : "");
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const pct = (a, b) => (b ? Math.round((a / b) * 100) : 0);
-const ownName = DATA.brand.name;
-const platformLabel = Object.fromEntries(DATA.platforms.map((p) => [p.id, p.label]));
-const ok = DATA.records.filter((r) => !r.error);
 const ownOf = (r) => r.analysis.brands.find((b) => b.own);
+
+function marketLabel(mk) {
+  return mk.label + (mk.region ? `（${regionName(mk.region)}）` : "");
+}
+
+function useMarket(id) {
+  const mk = BASE.markets.find((x) => x.id === id) || BASE.markets[0];
+  DATA = { ...mk, brand: BASE.brand };
+  platformLabel = Object.fromEntries(DATA.platforms.map((p) => [p.id, p.label]));
+  ok = DATA.records.filter((r) => !r.error);
+  $("market-tabs").querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.id === mk.id)));
+  render();
+}
+
+function renderShell() {
+  const a = BASE.agency || {};
+  $("brandbar").hidden = !(a.name || a.logo_data);
+  $("agency-name").textContent = a.name ? `${a.name} · GEO 监测报告` : "";
+  if (a.logo_data) { $("agency-logo").src = a.logo_data; $("agency-logo").hidden = false; }
+  $("headline").textContent = `${BASE.client} · AI 搜索可见度报告`;
+  const foot = [a.name && `本报告由 ${a.name} 提供`, a.website, a.contact, `生成于 ${BASE.generated_at}`].filter(Boolean);
+  $("agency-foot").innerHTML = foot.map((x) => `<span>${esc(x)}</span>`).join("");
+  const multi = BASE.markets.length > 1;
+  $("market-tabs").hidden = !multi;
+  $("market-tabs").innerHTML = BASE.markets.map((mk) => `<button type="button" id="mt-${esc(mk.id)}" data-id="${esc(mk.id)}" aria-pressed="false">${esc(marketLabel(mk))}</button>`).join("");
+  $("market-tabs").onclick = (e) => {
+    const btn = e.target.closest("button");
+    if (!btn) return;
+    try { history.replaceState(null, "", "#" + btn.dataset.id); } catch (err) { /* hash is optional */ }
+    useMarket(btn.dataset.id);
+  };
+  $("market-compare-wrap").hidden = !multi;
+  if (multi) {
+    const ms = BASE.markets.map((mk) => withMarket(mk, () => metrics(mk.records.filter((r) => !r.error))));
+    const rowsDef = [["对话次数", "n", ""], ["品牌提及率", "rate", "%"], ["SOV", "sov", "%"], ["Top1 提及率", "top1", "%"],
+      ["Top3 提及率", "top3", "%"], ["平均提及排名", "avgRank", " 名"], ["品牌好感度", "favor", ""], ["官网被引", "cited", "%"]];
+    $("market-compare").innerHTML = `<thead><tr><th>指标</th>${BASE.markets.map((mk) => `<th class="c">${esc(marketLabel(mk))}</th>`).join("")}</tr></thead><tbody>${rowsDef.map(([label, key, unit]) =>
+      `<tr><td>${esc(label)}</td>${ms.map((x) => `<td class="c num">${x[key] === "—" ? "—" : esc(x[key]) + unit}</td>`).join("")}</tr>`).join("")}</tbody>`;
+  }
+}
+
+// Change against an earlier run, as "▲3" / "▼2" percentage points. For rank, lower is better.
+function deltaHtml(cur, prev, key, lowerIsBetter) {
+  if (!prev || cur[key] === "—" || prev[key] === "—") return "—";
+  const d = Math.round((Number(cur[key]) - Number(prev[key])) * 10) / 10;
+  if (d === 0) return "持平";
+  const good = lowerIsBetter ? d < 0 : d > 0;
+  return `<span class="${good ? "up" : "down"}">${d > 0 ? "▲" : "▼"}${Math.abs(d)}</span>`;
+}
 
 function render() {
   const runDate = DATA.run_id.replace("T", " ").slice(0, 16);
-  $("eyebrow").textContent = `GEO 监测 · ${runDate}`;
-  $("headline").textContent = `${ownName} 在 AI 回答里的可见度`;
+  $("eyebrow").textContent = `${marketLabel(DATA)} · 第 ${DATA.runs} 次监测 · ${runDate}`;
   const failed = DATA.records.length - ok.length;
   $("scope").textContent = `${DATA.questions.length} 个问题 × ${DATA.platforms.length} 个平台 × 每题 ${DATA.samples} 次采样，共 ${ok.length} 条有效回答` + (failed ? `（${failed} 条请求失败）` : "");
-  $("mock-banner").hidden = !DATA.mock;
+  $("mock-banner").hidden = !BASE.markets.some((mk) => mk.mock);
 
   // KPI tiles (爱搜's 数据概览)
   const m = metrics(ok);
@@ -255,7 +359,21 @@ function render() {
     ["品牌好感度", m.favor, "分", m.favor === "—" ? "运行时加 --judge 才有" : "正面 100、中性 60、负面 0 的平均"],
     ["官网被引", m.cited, "%", "参考来源里有你网站的回答占比"],
   ];
-  $("kpis").innerHTML = tiles.map(([label, v, unit, note]) => `<div class="kpi own"><span class="label">${esc(label)}</span><span class="value">${esc(v)}${v === "—" ? "" : `<small>${esc(unit)}</small>`}</span><span class="note">${esc(note)}</span></div>`).join("");
+  const keyOf = { 对话次数: "n", 提及品牌对话: "mentioned", 品牌提及率: "rate", 品牌提及次数: "count", SOV: "sov", "Top1 提及率": "top1",
+    "Top3 提及率": "top3", 平均提及排名: "avgRank", 品牌好感度: "favor", 官网被引: "cited" };
+  const cmp = DATA.compare || {};
+  const prevM = cmp.previous ? metrics(cmp.previous.records.filter((r) => !r.error)) : null;
+  const baseM = cmp.baseline ? metrics(cmp.baseline.records.filter((r) => !r.error)) : null;
+  const sameBase = cmp.baseline && cmp.previous && cmp.baseline.run_id === cmp.previous.run_id;
+  const deltaLine = (label) => {
+    const k = keyOf[label];
+    if (k === "n" || (!prevM && !baseM)) return "";
+    const parts = [];
+    if (prevM) parts.push(`较上次 ${deltaHtml(m, prevM, k, k === "avgRank")}`);
+    if (baseM && !sameBase) parts.push(`较基线 ${deltaHtml(m, baseM, k, k === "avgRank")}`);
+    return `<span class="delta">${parts.join(" · ")}</span>`;
+  };
+  $("kpis").innerHTML = tiles.map(([label, v, unit, note]) => `<div class="kpi own"><span class="label">${esc(label)}</span><span class="value">${esc(v)}${v === "—" ? "" : `<small>${esc(unit)}</small>`}</span>${deltaLine(label)}<span class="note">${esc(note)}</span></div>`).join("");
 
   // Platform x metric table (爱搜's 平台表现)
   const per = Object.fromEntries(DATA.platforms.map((p) => [p.id, metrics(ok.filter((r) => r.platform === p.id))]));
@@ -285,27 +403,30 @@ function render() {
     : `<p class="sub">回答里没有引用来源。</p>`;
 
   renderHeat("rate");
-  $("heat-chips").addEventListener("click", (e) => {
+  $("heat-chips").querySelectorAll(".chip").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.k === "rate")));
+  $("heat-chips").onclick = (e) => {
     const btn = e.target.closest(".chip");
     if (!btn) return;
     $("heat-chips").querySelectorAll(".chip").forEach((b) => b.setAttribute("aria-pressed", String(b === btn)));
     renderHeat(btn.dataset.k);
-  });
+  };
   renderTrend();
   renderBrands();
+  renderScatter();
   renderDiagnosis();
+  renderGaps();
   renderSources();
   renderArticles();
 
   // Platform filter chips
   const chipDefs = [{ id: "all", label: "全部平台" }, ...DATA.platforms];
   $("chips").innerHTML = chipDefs.map((c) => `<button type="button" class="chip" id="chip-${esc(c.id)}" data-id="${esc(c.id)}" aria-pressed="${c.id === "all"}">${esc(c.label)}</button>`).join("");
-  $("chips").addEventListener("click", (e) => {
+  $("chips").onclick = (e) => {
     const btn = e.target.closest(".chip");
     if (!btn) return;
     $("chips").querySelectorAll(".chip").forEach((b) => b.setAttribute("aria-pressed", String(b === btn)));
     renderQuestions(btn.dataset.id);
-  });
+  };
   renderQuestions("all");
 }
 
@@ -417,13 +538,83 @@ function renderSources() {
       <td class="c num">${pct(n, total)}%</td></tr>`).join("")}</tbody>` : `<tbody><tr><td class="sub">这个平台的回答没有引用来源。</td></tr></tbody>`;
   };
   $("src-chips").innerHTML = DATA.platforms.map((p, i) => `<button type="button" class="chip" id="src-${esc(p.id)}" data-id="${esc(p.id)}" aria-pressed="${i === 0}">${esc(p.label)}</button>`).join("");
-  $("src-chips").addEventListener("click", (e) => {
+  $("src-chips").onclick = (e) => {
     const btn = e.target.closest(".chip");
     if (!btn) return;
     $("src-chips").querySelectorAll(".chip").forEach((b) => b.setAttribute("aria-pressed", String(b === btn)));
     draw(btn.dataset.id);
-  });
+  };
   if (DATA.platforms.length) draw(DATA.platforms[0].id);
+}
+
+function renderScatter() {
+  const st = new Map();
+  ok.forEach((r) => brandHits(r).forEach((rank, name) => {
+    const x = st.get(name) || { name, n: 0, rankSum: 0 };
+    x.n++; x.rankSum += rank; st.set(name, x);
+  }));
+  const pts = [...st.values()].sort((a, b) => b.n - a.n).slice(0, 12)
+    .map((b) => ({ ...b, rate: b.n / (ok.length || 1), rank: b.rankSum / b.n, own: b.name === ownName }));
+  const el = $("scatter");
+  if (!pts.length) { el.innerHTML = ""; el.removeAttribute("viewBox"); return; }
+  const W = 760, H = 320, L = 48, R = 24, T = 16, B = 40;
+  const maxRank = Math.max(3, Math.ceil(Math.max(...pts.map((p) => p.rank))));
+  const maxN = Math.max(...pts.map((p) => p.n));
+  const x = (v) => L + v * (W - L - R);
+  const y = (rk) => T + ((rk - 1) / (maxRank - 1)) * (H - T - B);
+  let svg = "";
+  [0, 0.25, 0.5, 0.75, 1].forEach((v) => { svg += `<line class="grid" x1="${x(v)}" x2="${x(v)}" y1="${T}" y2="${H - B}"/><text x="${x(v)}" y="${H - B + 16}" text-anchor="middle">${v * 100}%</text>`; });
+  for (let rk = 1; rk <= maxRank; rk++) svg += `<line class="grid" x1="${L}" x2="${W - R}" y1="${y(rk)}" y2="${y(rk)}"/><text x="${L - 8}" y="${y(rk) + 4}" text-anchor="end">第 ${rk} 名</text>`;
+  svg += `<text x="${(L + W - R) / 2}" y="${H - 4}" text-anchor="middle">提及率</text>`;
+  // Biggest first so small bubbles stay on top; each bubble wears a surface ring.
+  pts.slice().sort((a, b) => b.n - a.n).forEach((p) => {
+    const r = 6 + 16 * Math.sqrt(p.n / maxN);
+    const fill = p.own ? "var(--accent)" : "var(--bar)";
+    svg += `<circle cx="${x(p.rate)}" cy="${y(p.rank)}" r="${r}" fill="${fill}" fill-opacity="${p.own ? 0.95 : 0.7}" stroke="var(--bg)" stroke-width="2"><title>${esc(p.name)}：提及率 ${Math.round(p.rate * 100)}%，平均第 ${p.rank.toFixed(1)} 名，被提到 ${p.n} 次</title></circle>`;
+  });
+  // Labels: place right of the bubble (left near the edge), then push down until no label box overlaps; a leader line marks moved labels.
+  const placed = [];
+  pts.slice().sort((a, b) => y(a.rank) - y(b.rank)).forEach((p) => {
+    const r = 6 + 16 * Math.sqrt(p.n / maxN);
+    const text = p.name + (p.own ? "（你）" : "");
+    const w = [...text].reduce((acc, ch) => acc + (ch.charCodeAt(0) > 255 ? 12 : 7), 0);
+    const right = x(p.rate) + r + 6 + w < W;
+    const x0 = right ? x(p.rate) + r + 6 : x(p.rate) - r - 6 - w;
+    let ly = y(p.rank) + 4;
+    const hit = () => placed.some((b) => x0 < b.x + b.w && x0 + w > b.x && Math.abs(ly - b.y) < 15);
+    let guard = 0;
+    while (hit() && guard++ < 20) ly += 15;
+    placed.push({ x: x0, y: ly, w });
+    if (Math.abs(ly - 4 - y(p.rank)) > 6) svg += `<line x1="${right ? x(p.rate) + r : x(p.rate) - r}" y1="${y(p.rank)}" x2="${right ? x0 - 2 : x0 + w + 2}" y2="${ly - 4}" stroke="var(--muted)" stroke-width="1"/>`;
+    svg += `<text class="lbl${p.own ? " own" : ""}" x="${x0}" y="${ly}">${esc(text)}</text>`;
+  });
+  el.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  el.innerHTML = svg;
+}
+
+// Questions where the brand is weakest, the sites AI leaned on when answering them, and Claude's topic ideas.
+function renderGaps() {
+  const names = DATA.site_names || {};
+  const topics = DATA.diagnosis?.topics || [];
+  const rows = DATA.questions.map((q, qi) => {
+    const rs = ok.filter((r) => r.q === qi);
+    const rate = metrics(rs).rate;
+    const missing = DATA.platforms.filter((p) => { const ps = rs.filter((r) => r.platform === p.id); return ps.length && metrics(ps).rate === 0; });
+    const cnt = {};
+    rs.forEach((r) => new Set(r.analysis.domains.filter(Boolean)).forEach((d) => (cnt[d] = (cnt[d] || 0) + 1)));
+    const ownD = DATA.brand.domains || [];
+    const sites = Object.entries(cnt).filter(([d]) => !ownD.some((o) => d === o || d.endsWith("." + o))).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([d]) => names[d] || d);
+    const t = topics.filter((x) => x.question === q.text || x.question_index === qi + 1);
+    return { q, qi, rate, missing, sites, t };
+  }).filter((g) => g.rate < 50).sort((a, b) => a.rate - b.rate);
+  $("gap-note").textContent = rows.length
+    ? "提及率低于 50% 的问题，按从弱到强排列。“去哪里发”是 AI 回答这个问题时引用最多的第三方网站。" + (topics.length ? "选题由 Claude 根据缺口撰写。" : "运行 diagnose 后，Claude 会给每个缺口写选题。")
+    : "所有问题的提及率都在 50% 以上，暂时没有明显缺口。";
+  $("gap-table").innerHTML = rows.length ? `<thead><tr><th>问题</th><th class="c">提及率</th><th>没提到你的平台</th><th>去哪里发</th><th>建议选题</th></tr></thead><tbody>${rows.map((g) => `
+    <tr><td>${esc(g.q.text)}</td><td class="c num">${g.rate}%</td>
+      <td>${g.missing.map((p) => `<span class="tag">${esc(p.label)}</span>`).join(" ") || '<span class="sub">—</span>'}</td>
+      <td>${g.sites.map((n) => `<span class="tag">${esc(n)}</span>`).join(" ") || '<span class="sub">—</span>'}</td>
+      <td>${g.t.length ? g.t.map((x) => `<div><strong>${esc(x.title)}</strong>${x.channel ? ` <span class="sub">· ${esc(x.channel)}</span>` : ""}</div>`).join("") : '<span class="sub">—</span>'}</td></tr>`).join("")}</tbody>` : "";
 }
 
 const ARTICLE_LIMIT = 15;
@@ -510,8 +701,10 @@ function renderTrend() {
   if (!T || T.runs.length < 2) {
     $("trend-note").textContent = "至少要运行两次监测才有趋势。建议每天或每周跑一次。";
     $("trend-wrap").hidden = true;
+    $("trend-legend").innerHTML = "";
     return;
   }
+  $("trend-wrap").hidden = false;
   // Color follows the brand, in a fixed order: you, then configured competitors, then discovered brands.
   const order = [...DATA.brands.map((b) => b.name), ...Object.keys(T.rates).filter((n) => !DATA.brands.some((b) => b.name === n)).sort()];
   const color = (n) => { const i = order.indexOf(n); return i >= 0 && i < 8 ? `var(--s${i + 1})` : "var(--muted)"; };
@@ -557,7 +750,7 @@ function renderTrend() {
       tip.style.left = `${Math.min(Math.max(px + 12, 0), box.width - tip.offsetWidth)}px`;
     });
   });
-  el.addEventListener("pointerleave", () => { tip.hidden = true; cross.setAttribute("visibility", "hidden"); });
+  el.onpointerleave = () => { tip.hidden = true; cross.setAttribute("visibility", "hidden"); };
 }
 
 function sentimentTile(mentioned) {
@@ -628,5 +821,11 @@ function renderQuestions(platformId) {
   }));
 }
 
-render();
+renderShell();
+const startId = (location.hash || "").slice(1);
+useMarket(BASE.markets.some((mk) => mk.id === startId) ? startId : BASE.markets[0].id);
+window.addEventListener("hashchange", () => {
+  const id = (location.hash || "").slice(1);
+  if (BASE.markets.some((mk) => mk.id === id) && id !== DATA.id) useMarket(id);
+});
 </script>

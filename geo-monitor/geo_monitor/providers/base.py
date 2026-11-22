@@ -1,6 +1,7 @@
 """Common types for AI platform providers."""
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 
 
@@ -28,3 +29,11 @@ def dedupe_citations(items: list[dict]) -> list[dict]:
         seen.add(key)
         out.append({"url": url, "title": (item.get("title") or "").strip()})
     return out
+
+
+URL_RE = re.compile(r"https?://[^\s)\]>\"'，。、]+")
+
+
+def urls_in_text(text: str) -> list[dict]:
+    """Links written into the answer itself, for platforms that return no structured citations."""
+    return [{"url": u.rstrip(".,;:"), "title": ""} for u in URL_RE.findall(text or "")]

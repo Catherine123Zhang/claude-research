@@ -1,4 +1,7 @@
-config.yaml
+agency.yaml
+logo.*
+clients/*
+!clients/example-*.yaml
 data/
-report.html
+reports/
 __pycache__/

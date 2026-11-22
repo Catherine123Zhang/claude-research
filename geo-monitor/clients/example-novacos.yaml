@@ -1,0 +1,23 @@
+# 第二个示例客户（虚构）：化妆品代工厂，只做海外，目标市场越南。
+name: Novacos 化妆品
+brand:
+  name: Novacos
+  aliases: ["Novacos", "诺瓦"]
+  domains: ["novacos.example"]
+samples: 2
+markets:
+  - id: overseas
+    label: 东南亚
+    region: VN
+    competitors:
+      - {name: Cosmax}
+      - {name: Kolmar}
+      - {name: Intercos}
+    questions:
+      - {text: "Which cosmetics OEM factory in China is good for sunscreen private label?", category: 求推荐}
+      - {text: "Best hand wash OEM manufacturer for Southeast Asia distributors?", category: 求推荐}
+      - {text: "How to find a reliable skincare OEM with low MOQ?", category: 求助/解决}
+    platforms:
+      - {id: chatgpt, label: ChatGPT, type: openai}
+      - {id: perplexity, label: Perplexity, type: perplexity}
+      - {id: gemini, label: Gemini, type: gemini}

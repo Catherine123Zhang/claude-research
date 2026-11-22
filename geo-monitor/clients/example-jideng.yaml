@@ -1,0 +1,51 @@
+# 一个客户一个文件：clients/<客户ID>.yaml。示例：宁波吉登（电动牙刷），海外 + 国内两个市场。
+name: 宁波吉登
+brand:
+  name: JIDENG
+  aliases: ["JIDENG", "Jideng", "吉登", "Ningbo Jideng"]   # 回答里可能出现的写法，中英文都写上
+  domains: ["cnjideng.com"]                               # 官网域名，用来判断"官网是否被 AI 引用"
+
+samples: 3            # 每个问题问几次；AI 每次回答不一样，次数越多越稳，费用也越高
+# baseline_run: "2026-11-01T09:00:00"   # 开始优化前的那次运行，报告里用来做"优化前后对比"；不写就用第一次运行
+
+markets:
+  - id: overseas
+    label: 海外
+    region: US                      # 按地区提问：ChatGPT、Claude、Perplexity、Grok 会按这个国家给答案
+    competitors:
+      - {name: Philips, aliases: ["Philips", "Sonicare"]}
+      - {name: Oral-B}
+      - {name: Shenzhen Risun, aliases: ["Risun"]}
+      - {name: Baolijie}
+      - {name: Yinglang}
+    questions:
+      - {text: "Who are the most reliable electric toothbrush OEM manufacturers in China?", category: 求推荐}
+      - {text: "I want to launch a private label sonic toothbrush brand. Which Chinese factory should I work with?", category: 求推荐}
+      - {text: "Best China supplier for electric toothbrushes with ISO13485 and FDA registration?", category: 求推荐}
+      - {text: "How do I choose an electric toothbrush factory in China?", category: 求助/解决}
+    platforms:
+      - {id: chatgpt, label: ChatGPT, type: openai}            # OPENAI_API_KEY
+      - {id: perplexity, label: Perplexity, type: perplexity}  # PERPLEXITY_API_KEY
+      - {id: gemini, label: Gemini, type: gemini}              # GEMINI_API_KEY
+      - {id: claude, label: Claude, type: claude}              # ANTHROPIC_API_KEY
+      - {id: grok, label: Grok, type: grok}                    # XAI_API_KEY
+
+  - id: domestic
+    label: 国内
+    competitors:
+      - {name: 飞利浦, aliases: ["飞利浦", "Philips"]}
+      - {name: 欧乐B, aliases: ["欧乐B", "Oral-B"]}
+      - {name: 小米, aliases: ["小米", "米家"]}
+      - {name: usmile, aliases: ["usmile", "笑容加"]}
+    questions:
+      - {text: "电动牙刷代工厂哪家好？", category: 求推荐}
+      - {text: "想做自有品牌电动牙刷，找哪家工厂靠谱？", category: 求推荐}
+      - {text: "宁波有哪些电动牙刷工厂？", category: 咨询/查询}
+      - {text: "电动牙刷哪个牌子性价比高？", category: 对比/选择}
+    platforms:
+      - {id: doubao, label: 豆包, type: doubao_bot, model: bot-xxxxxxxx}   # ARK_API_KEY；model 填开了"联网"插件的应用 ID
+      - {id: qwen, label: 千问, type: qwen}                                # DASHSCOPE_API_KEY
+      - {id: kimi, label: Kimi, type: kimi}                                # MOONSHOT_API_KEY
+      - {id: deepseek, label: DeepSeek, type: deepseek}                    # DEEPSEEK_API_KEY（API 不联网）
+
+judge_model: claude-opus-5-5   # --judge 和 diagnose 用的模型

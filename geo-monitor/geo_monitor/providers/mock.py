@@ -10,37 +10,52 @@ import random
 
 from .base import Answer
 
-SOURCE_POOL = [
-    ("https://www.alibaba.com/showroom/electric-toothbrush-oem.html", "Electric Toothbrush OEM - Alibaba.com"),
-    ("https://www.made-in-china.com/manufacturers/sonic-toothbrush.html", "Sonic Toothbrush Manufacturers - Made-in-China"),
-    ("https://www.globalsources.com/electric-toothbrush/", "Electric toothbrush suppliers - Global Sources"),
-    ("https://www.reddit.com/r/AskElectronics/comments/oem_toothbrush/", "Anyone sourced electric toothbrushes from China?"),
-    ("https://www.youtube.com/watch?v=factorytour", "Inside a Chinese toothbrush factory"),
-    ("https://www.linkedin.com/pulse/top-oral-care-oem-suppliers", "Top oral care OEM suppliers"),
-    ("https://www.cnjideng.com/products/", "JIDENG Sonic Toothbrush"),
-    ("https://www.statista.com/topics/oral-care/", "Oral care market - Statista"),
-    ("https://www.thomasnet.com/oral-care-suppliers", "Oral care suppliers - Thomasnet"),
-    ("https://www.zhihu.com/question/oem-toothbrush", "电动牙刷代工厂哪家好？"),
-]
+SOURCES = {
+    "overseas": [
+        ("https://www.alibaba.com/showroom/{slug}.html", "{q} - Alibaba.com"),
+        ("https://www.made-in-china.com/manufacturers/{slug}.html", "{q} - Made-in-China"),
+        ("https://www.globalsources.com/{slug}/", "{q} suppliers - Global Sources"),
+        ("https://www.reddit.com/r/smallbusiness/comments/{slug}/", "Anyone sourced this from China?"),
+        ("https://www.youtube.com/watch?v={slug}", "Factory tour: how it's made"),
+        ("https://www.linkedin.com/pulse/{slug}", "Top OEM suppliers to watch"),
+        ("https://www.thomasnet.com/{slug}", "{q} - Thomasnet"),
+        ("https://www.statista.com/topics/{slug}/", "Market overview - Statista"),
+        ("https://www.quora.com/{slug}", "Which supplier is the best?"),
+        ("https://{own}/products/", "Official site"),
+    ],
+    "domestic": [
+        ("https://www.douyin.com/video/{slug}", "{q}｜实测对比"),
+        ("https://www.zhihu.com/question/{slug}", "{q}？"),
+        ("https://mp.weixin.qq.com/s/{slug}", "{q}，看这一篇就够了"),
+        ("https://baijiahao.baidu.com/s?id={slug}", "{q}排行榜"),
+        ("https://www.xiaohongshu.com/explore/{slug}", "{q}｜真实体验"),
+        ("https://www.1688.com/{slug}.html", "{q} - 1688"),
+        ("https://baike.baidu.com/item/{slug}", "{q} - 百度百科"),
+        ("https://www.toutiao.com/article/{slug}/", "{q}怎么选"),
+        ("https://www.smzdm.com/p/{slug}/", "{q}值得买吗"),
+        ("https://{own}/", "品牌官网"),
+    ],
+}
 
+EXTRA_BRANDS = {"overseas": ["Northwind", "Brightway", "Apex Supply"], "domestic": ["华信", "联创", "优品"]}
 
-QUERY_POOL = [
-    "electric toothbrush OEM manufacturer China",
-    "sonic toothbrush factory private label",
-    "best electric toothbrush supplier MOQ",
-    "oral care OEM ISO13485 China",
-    "电动牙刷 代工厂 推荐",
-]
-
-EXTRA_BRANDS = ["Xiaomi", "Usmile", "Seago", "Lebooo"]
+TEMPLATE = {
+    "overseas": ("Here are some options to consider for: {q}", "{i}. **{b}** - established supplier with export experience and OEM/ODM service.",
+                 "Check certifications, MOQ and sample lead time before you order."),
+    "domestic": ("关于“{q}”，可以重点看这几家：", "{i}. **{b}**：口碑稳定，产品线齐全，售后有保障。",
+                 "建议先对比资质、价格和售后，再根据自己的需求选择。"),
+}
 
 
 class MockProvider:
-    def __init__(self, platform_id: str, brands: list[str], sample: int = 0, run_id: str = ""):
+    def __init__(self, platform_id: str, brands: list[str], sample: int = 0, run_id: str = "",
+                 kind: str = "overseas", own_domain: str = "example.com"):
         self.platform_id = platform_id
         self.brands = brands  # display names, first one is the monitored brand
         self.sample = sample
         self.run_id = run_id  # each run gets different sample answers, so trends have something to show
+        self.kind = kind if kind in SOURCES else "overseas"
+        self.own_domain = own_domain
 
     def ask(self, question: str) -> Answer:
         seed = hashlib.sha256(f"{self.run_id}|{self.platform_id}|{question}|{self.sample}".encode()).hexdigest()
@@ -52,24 +67,19 @@ class MockProvider:
             picked.insert(rng.randint(0, len(picked)), own)
         # Sometimes the AI names a brand nobody configured, which only the judge step catches.
         if rng.random() < 0.4:
-            picked.append(rng.choice(EXTRA_BRANDS))
-        lines = [f"Here are some options to consider for: {question}", ""]
-        for i, name in enumerate(picked, 1):
-            lines.append(f"{i}. **{name}** - established supplier with export experience and OEM/ODM service.")
-        lines += ["", "Check certifications (CE, FCC, FDA), MOQ and sample lead time before you order."]
-        sources = rng.sample(SOURCE_POOL, k=rng.randint(2, 5))
-        queries = rng.sample(QUERY_POOL, k=rng.randint(1, 3))
-        return Answer(
-            text="\n".join(lines),
-            citations=[{"url": u, "title": t} for u, t in sources],
-            queries=queries,
-            model=f"mock-{self.platform_id}",
-        )
+            picked.append(rng.choice(EXTRA_BRANDS[self.kind]))
+        head, line, tail = TEMPLATE[self.kind]
+        lines = [head.format(q=question), ""] + [line.format(i=i, b=b) for i, b in enumerate(picked, 1)] + ["", tail]
+        short = question.rstrip("?？")[:24]
+        sources = rng.sample(SOURCES[self.kind], k=rng.randint(2, 5))
+        cites = [{"url": u.format(slug=seed[:8], own=self.own_domain), "title": t.format(q=short)} for u, t in sources]
+        queries = [short, f"{short} {'推荐' if self.kind == 'domestic' else 'supplier'}"][: rng.randint(1, 2)]
+        return Answer(text="\n".join(lines), citations=cites, queries=queries, model=f"mock-{self.platform_id}")
 
     def judge(self, answer_text: str) -> dict:
         """Stand-in for the LLM judge: brands in order of appearance, sentiment toward the monitored brand."""
         rng = random.Random(hashlib.sha256(answer_text.encode()).hexdigest())
-        candidates = self.brands + EXTRA_BRANDS
+        candidates = self.brands + EXTRA_BRANDS[self.kind]
         names = [b for _, b in sorted((answer_text.find(b), b) for b in candidates if b in answer_text)]
         own = self.brands[0]
         sentiment = rng.choices(["正面", "中性", "负面"], weights=[6, 3, 1])[0] if own in names else "未提及"

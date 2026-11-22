@@ -23,15 +23,23 @@ class Recommendation(BaseModel):
     action: str = Field(description="建议动作：具体在哪些网站、发什么内容、要达到什么效果。")
 
 
+class Topic(BaseModel):
+    question: str = Field(description="对应的监测问题，原文照抄。")
+    title: str = Field(description="建议的文章或内容标题，用该市场的语言。")
+    channel: str = Field(description="建议发布的网站或平台，优先用 AI 回答这个问题时引用过的网站。")
+
+
 class Diagnosis(BaseModel):
     summary: str = Field(description="整体表现：3-4 句总结。")
     platforms: list[PlatformDiagnosis]
     recommendations: list[Recommendation] = Field(description="优化建议：4-6 条，按优先级排序。")
+    topics: list[Topic] = Field(description="内容选题：针对提及率最低的问题，每个问题 1-2 个选题。")
 
 
 PROMPT = """你是做 GEO（让品牌被 AI 搜索推荐）的分析师。下面是一次监测的统计结果：同一批问题分别问了几个 AI 平台，统计了每个品牌被提到的比例（rate）、在回答里的平均排名（avg_rank）、梯队（tier，T1 最强），以及 AI 引用了哪些网站和哪类网站。
 
 本品牌：{brand}
+市场：{market}
 行业和问题：
 {questions}
 
@@ -42,12 +50,14 @@ PROMPT = """你是做 GEO（让品牌被 AI 搜索推荐）的分析师。下面
 1. summary：整体表现。
 2. platforms：每个平台一项，platform_id 用统计里的键。explanation 解释本品牌在该平台的位置和与竞品的差距，结合该平台引用的网站类型推测原因；actions 给出具体动作。
    source_preference 用一句话概括该平台的信源偏好（看 site_types 和 top_domains）。
-3. recommendations：整体优化建议，按优先级排序。每条写标题、建议依据（引用具体数字）和建议动作（落到"在哪类网站、发什么内容"，优先利用 AI 已经常引用的网站）。
+3. topics：找出 question_gaps 里提及率最低的问题，每个给 1-2 个能让 AI 引用、并提到本品牌的内容选题，写明发布渠道（优先用 cited_sites 里的网站）。
+4. recommendations：整体优化建议，按优先级排序。每条写标题、建议依据（引用具体数字）和建议动作（落到"在哪类网站、发什么内容"，优先利用 AI 已经常引用的网站）。
 
 只根据给出的数据下结论，数据不足以判断的地方直接说明，不要编造数字。"""
 
 
-def run_claude(stats: dict, brand: str, questions: list[dict], model: str) -> dict:
+def run_claude(stats: dict, brand: str, questions: list[dict], model: str, market: str = "",
+               gaps: list[dict] | None = None) -> dict:
     client = anthropic.Anthropic()
     q_text = "\n".join(f"- {q['text']}" for q in questions)
     try:
@@ -58,7 +68,7 @@ def run_claude(stats: dict, brand: str, questions: list[dict], model: str) -> di
             fallbacks="default",
             output_format=Diagnosis,
             messages=[{"role": "user", "content": PROMPT.format(
-                brand=brand, questions=q_text, stats=json.dumps(stats, ensure_ascii=False, indent=1))}],
+                brand=brand, market=market or "未注明", questions=q_text, stats=json.dumps({"platforms": stats, "question_gaps": gaps or []}, ensure_ascii=False, indent=1))}],
         )
     except anthropic.APIStatusError as e:
         raise SystemExit(f"诊断失败：API error {e.status_code}: {e.message}")
@@ -69,7 +79,7 @@ def run_claude(stats: dict, brand: str, questions: list[dict], model: str) -> di
     return response.parsed_output.model_dump()
 
 
-def run_mock(stats: dict, brand: str, own_domains: list[str]) -> dict:
+def run_mock(stats: dict, brand: str, own_domains: list[str], gaps: list[dict] | None = None) -> dict:
     """Fill-in text built from the numbers, for the offline demo."""
     platforms, ranked = [], []
     for pid, s in stats.items():
@@ -90,6 +100,9 @@ def run_mock(stats: dict, brand: str, own_domains: list[str]) -> dict:
     return {
         "summary": f"{brand} 在 {ranked[-1][1]} 表现最好，在 {ranked[0][1]} 最弱。（示例文字，由模拟数据生成）",
         "platforms": platforms,
+        "topics": [{"question": g["question"], "title": (f"Buyer's guide: {g['question'].rstrip('?')}" if g["question"].isascii()
+                              else f"{g['question'].rstrip('?？')}：完整选购指南"),
+                    "channel": (g["cited_sites"] or ["官网博客"])[0]} for g in (gaps or [])[:3]],
         "recommendations": [
             {"title": f"攻坚 {ranked[0][1]} 可见度短板",
              "basis": f"{brand} 在 {ranked[0][1]} 的提及率只有 {round(ranked[0][0] * 100)}%，是所有平台里最低的。",

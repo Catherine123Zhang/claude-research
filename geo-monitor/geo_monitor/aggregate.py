@@ -77,3 +77,26 @@ def platform_stats(records: list[dict], tracked: list[dict], platforms: list[dic
             "sentiment": dict(sentiment),
         }
     return out
+
+
+def summary(records: list[dict], tracked: list[dict]) -> dict:
+    """Headline numbers for the client overview; same definitions as the report's metrics()."""
+    own_name = next(b["name"] for b in tracked if b.get("own"))
+    n = len(records)
+    mentioned = own_hits = all_hits = top1 = top3 = 0
+    for r in records:
+        hits = brand_hits(r, tracked)
+        all_hits += len(hits)
+        own = next(b for b in r["analysis"]["brands"] if b["own"])
+        if not own["mentioned"]:
+            continue
+        mentioned += 1
+        own_hits += 1
+        rank = hits.get(own_name) or own["rank"]
+        top1 += rank == 1
+        top3 += rank <= 3
+
+    def pct(a, b):
+        return round(100 * a / b) if b else 0
+
+    return {"rate": pct(mentioned, n), "sov": pct(own_hits, all_hits), "top1": pct(top1, n), "top3": pct(top3, n)}

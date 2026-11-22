@@ -1,0 +1,5 @@
+# 复制成 agency.yaml：报告里显示的服务商信息（你的公司）。
+name: 示例数字营销
+logo: logo.png            # 可选，PNG / JPG / SVG，会嵌进报告里
+website: www.example.com
+contact: 微信 example-geo

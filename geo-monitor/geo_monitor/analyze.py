@@ -7,7 +7,7 @@ from urllib.parse import urlparse
 
 SITE_TYPES = {
     "视频平台": ["youtube.com", "douyin.com", "bilibili.com", "tiktok.com", "ixigua.com", "vimeo.com"],
-    "问答/论坛": ["zhihu.com", "quora.com", "reddit.com", "tieba.baidu.com", "stackexchange.com"],
+    "问答/论坛": ["zhihu.com", "quora.com", "reddit.com", "tieba.baidu.com", "stackexchange.com", "smzdm.com", "douban.com"],
     "B2B 平台": ["alibaba.com", "made-in-china.com", "globalsources.com", "thomasnet.com", "1688.com", "tradekey.com", "ec21.com"],
     "电商平台": ["amazon.com", "jd.com", "tmall.com", "taobao.com", "ebay.com", "walmart.com"],
     "社交媒体": ["linkedin.com", "facebook.com", "instagram.com", "x.com", "twitter.com", "xiaohongshu.com", "weibo.com"],

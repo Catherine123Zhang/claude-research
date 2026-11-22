@@ -3,6 +3,9 @@
 Each provider returns the answer text plus the web sources it cites.
 Response shapes follow each vendor's docs; they are parsed defensively
 because vendors change field names over time.
+
+`region` is an ISO country code (e.g. "US", "VN"). Platforms whose API
+accepts a user location get it, so answers reflect that market.
 """
 from __future__ import annotations
 
@@ -10,7 +13,7 @@ import os
 
 import requests
 
-from .base import Answer, dedupe_citations
+from .base import Answer, dedupe_citations, urls_in_text
 
 TIMEOUT = 180
 
@@ -29,19 +32,28 @@ def _post(url: str, headers: dict, body: dict) -> dict:
     return r.json()
 
 
-class OpenAIResponsesProvider:
-    """ChatGPT via the OpenAI Responses API with the web_search tool."""
+class ResponsesProvider:
+    """OpenAI Responses API with the web_search tool: ChatGPT, and Grok through xAI's compatible endpoint."""
 
-    def __init__(self, model: str = "gpt-5", api_key_env: str = "OPENAI_API_KEY"):
-        self.model, self.api_key_env = model, api_key_env
+    PRESETS = {
+        "openai": {"url": "https://api.openai.com/v1/responses", "api_key_env": "OPENAI_API_KEY", "model": "gpt-5"},
+        "grok": {"url": "https://api.x.ai/v1/responses", "api_key_env": "XAI_API_KEY", "model": "grok-4"},
+    }
+
+    def __init__(self, kind: str, model: str | None = None, api_key_env: str | None = None,
+                 region: str | None = None):
+        preset = self.PRESETS[kind]
+        self.url, self.region = preset["url"], region
+        self.model = model or preset["model"]
+        self.api_key_env = api_key_env or preset["api_key_env"]
 
     def ask(self, question: str) -> Answer:
+        tool = {"type": "web_search"}
+        if self.region:
+            tool["user_location"] = {"type": "approximate", "country": self.region}
         try:
-            data = _post(
-                "https://api.openai.com/v1/responses",
-                {"Authorization": f"Bearer {_key(self.api_key_env)}"},
-                {"model": self.model, "tools": [{"type": "web_search"}], "input": question},
-            )
+            data = _post(self.url, {"Authorization": f"Bearer {_key(self.api_key_env)}"},
+                         {"model": self.model, "tools": [tool], "input": question})
         except Exception as e:  # noqa: BLE001 - report any failure as a row error
             return Answer(model=self.model, error=str(e))
         text, cites, queries = [], [], []
@@ -58,14 +70,15 @@ class OpenAIResponsesProvider:
                     for a in part.get("annotations", []):
                         if a.get("type") == "url_citation":
                             cites.append({"url": a.get("url"), "title": a.get("title")})
-        return Answer(text="".join(text), citations=dedupe_citations(cites), queries=queries,
+        full = "".join(text)
+        return Answer(text=full, citations=dedupe_citations(cites or urls_in_text(full)), queries=queries,
                       model=data.get("model", self.model))
 
 
 class GeminiProvider:
-    """Gemini with Google Search grounding."""
+    """Gemini with Google Search grounding. The API takes no location; the question's language steers it."""
 
-    def __init__(self, model: str = "gemini-2.5-flash", api_key_env: str = "GEMINI_API_KEY"):
+    def __init__(self, model: str = "gemini-2.5-flash", api_key_env: str = "GEMINI_API_KEY", region: str | None = None):
         self.model, self.api_key_env = model, api_key_env
 
     def ask(self, question: str) -> Answer:
@@ -89,7 +102,7 @@ class GeminiProvider:
 
 
 class ChatCompletionsProvider:
-    """OpenAI-compatible chat endpoints: Perplexity, Qwen (DashScope), Doubao bots (Ark), DeepSeek."""
+    """OpenAI-compatible chat endpoints: Perplexity, Qwen (DashScope), Doubao bots (Ark), Kimi, DeepSeek."""
 
     PRESETS = {
         "perplexity": {
@@ -111,6 +124,13 @@ class ChatCompletionsProvider:
             "model": "bot-xxxxxxxx",
             "extra": {},
         },
+        # Kimi searches through its built-in $web_search tool, which the client must echo back.
+        "kimi": {
+            "url": "https://api.moonshot.cn/v1/chat/completions",
+            "api_key_env": "MOONSHOT_API_KEY",
+            "model": "kimi-k2-turbo-preview",
+            "extra": {"tools": [{"type": "builtin_function", "function": {"name": "$web_search"}}]},
+        },
         # DeepSeek's API has no web search: answers come from model memory only.
         "deepseek": {
             "url": "https://api.deepseek.com/chat/completions",
@@ -120,19 +140,33 @@ class ChatCompletionsProvider:
         },
     }
 
-    def __init__(self, kind: str, model: str | None = None, api_key_env: str | None = None, url: str | None = None):
+    def __init__(self, kind: str, model: str | None = None, api_key_env: str | None = None, url: str | None = None,
+                 region: str | None = None):
         preset = self.PRESETS[kind]
         self.kind = kind
         self.url = url or preset["url"]
         self.model = model or preset["model"]
         self.api_key_env = api_key_env or preset["api_key_env"]
-        self.extra = preset["extra"]
+        self.extra = dict(preset["extra"])
+        if kind == "perplexity" and region:
+            self.extra["web_search_options"] = {"user_location": {"country": region}}
 
     def ask(self, question: str) -> Answer:
-        body = {"model": self.model, "messages": [{"role": "user", "content": question}], **self.extra}
+        messages = [{"role": "user", "content": question}]
         try:
-            data = _post(self.url, {"Authorization": f"Bearer {_key(self.api_key_env)}"}, body)
-            text = data["choices"][0]["message"].get("content") or ""
+            headers = {"Authorization": f"Bearer {_key(self.api_key_env)}"}
+            for _ in range(5):
+                data = _post(self.url, headers, {"model": self.model, "messages": messages, **self.extra})
+                choice = data["choices"][0]
+                if choice.get("finish_reason") != "tool_calls":
+                    break
+                # Kimi's $web_search: hand the arguments straight back and the server runs the search.
+                msg = choice["message"]
+                messages.append(msg)
+                for call in msg.get("tool_calls") or []:
+                    messages.append({"role": "tool", "tool_call_id": call["id"], "name": call["function"]["name"],
+                                     "content": call["function"]["arguments"]})
+            text = choice["message"].get("content") or ""
         except Exception as e:  # noqa: BLE001
             return Answer(model=self.model, error=str(e))
         cites: list[dict] = []
@@ -145,4 +179,5 @@ class ChatCompletionsProvider:
             cites.append({"url": r.get("url"), "title": r.get("title") or r.get("site_name")})
         for r in data.get("references") or []:  # Doubao bot
             cites.append({"url": r.get("url"), "title": r.get("title") or r.get("site_name")})
-        return Answer(text=text, citations=dedupe_citations(cites), model=data.get("model", self.model))
+        return Answer(text=text, citations=dedupe_citations(cites or urls_in_text(text)),
+                      model=data.get("model", self.model))
