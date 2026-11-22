@@ -15,7 +15,7 @@ from pathlib import Path
 import yaml
 
 from .aggregate import platform_stats
-from .analyze import analyze
+from .analyze import analyze, site_name
 from .diagnose import run_mock
 from .providers import build_provider
 from .providers.mock import MockProvider
@@ -143,6 +143,7 @@ def cmd_report(cfg: dict, out_path: str, fragment: bool) -> None:
         "records": [{k: r.get(k) for k in ("platform", "q", "sample", "text", "citations", "queries",
                                               "error", "analysis", "judge")} for r in latest],
         "stats": run_stats(cfg, latest),
+        "site_names": {d: site_name(d) for r in latest if not r.get("error") for d in r["analysis"]["domains"] if d},
         "diagnosis": json.loads(diag_file.read_text(encoding="utf-8")) if diag_file.exists() else None,
     }
     payload = json.dumps(data, ensure_ascii=False).replace("</", "<\\/")

@@ -17,6 +17,27 @@ SITE_TYPES = {
 }
 
 
+SITE_NAMES = {
+    "youtube.com": "YouTube", "douyin.com": "抖音", "bilibili.com": "哔哩哔哩", "tiktok.com": "TikTok",
+    "zhihu.com": "知乎", "quora.com": "Quora", "reddit.com": "Reddit", "tieba.baidu.com": "百度贴吧",
+    "alibaba.com": "阿里巴巴国际站", "made-in-china.com": "中国制造网", "globalsources.com": "环球资源",
+    "thomasnet.com": "Thomasnet", "1688.com": "1688", "tradekey.com": "TradeKey",
+    "amazon.com": "Amazon", "jd.com": "京东", "tmall.com": "天猫", "taobao.com": "淘宝",
+    "linkedin.com": "LinkedIn", "facebook.com": "Facebook", "instagram.com": "Instagram", "x.com": "X",
+    "xiaohongshu.com": "小红书", "weibo.com": "微博", "mp.weixin.qq.com": "微信公众号",
+    "baijiahao.baidu.com": "百家号", "toutiao.com": "今日头条", "sohu.com": "搜狐", "163.com": "网易",
+    "sina.com.cn": "新浪", "medium.com": "Medium", "baike.baidu.com": "百度百科", "wikipedia.org": "维基百科",
+    "statista.com": "Statista", "smzdm.com": "什么值得买",
+}
+
+
+def site_name(domain: str) -> str:
+    for root, name in SITE_NAMES.items():
+        if domain == root or domain.endswith("." + root):
+            return name
+    return domain
+
+
 def site_type(domain: str, own_domains: list[str]) -> str:
     if any(domain == d or domain.endswith("." + d) for d in own_domains):
         return "品牌官网"

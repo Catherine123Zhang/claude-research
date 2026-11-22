@@ -144,6 +144,13 @@ footer p { margin: 0 0 6px; max-width: 70ch; }
   </section>
 
   <section>
+    <h2>各平台引用 Top 10</h2>
+    <p class="sub section-note">每个 AI 平台最常引用的网站。引用率 = 该网站被引用次数 ÷ 该平台全部引用次数。</p>
+    <div class="chips" id="src-chips" role="group" aria-label="选择平台"></div>
+    <div class="scroll"><table id="src-table"></table></div>
+  </section>
+
+  <section>
     <h2>被引用的文章</h2>
     <p class="sub section-note">AI 回答时参考了哪些网页。引用次数高的文章，是值得去投稿、合作或模仿写法的渠道。</p>
     <div class="scroll"><table id="article-table"></table></div>
@@ -213,7 +220,7 @@ function render() {
   const domains = Object.entries(domainCount).sort((a, b) => b[1] - a[1]).slice(0, 10);
   const maxD = domains.length ? domains[0][1] : 1;
   $("by-domain").innerHTML = domains.length
-    ? domains.map(([d, n]) => barRow(d, (n / maxD) * 100, `${pct(n, ok.length)}%`, ownDomains.some((o) => d === o || d.endsWith("." + o)))).join("")
+    ? domains.map(([d, n]) => barRow((DATA.site_names || {})[d] || d, (n / maxD) * 100, `${pct(n, ok.length)}%`, ownDomains.some((o) => d === o || d.endsWith("." + o)))).join("")
     : `<p class="sub">回答里没有引用来源。</p>`;
 
   // Citation site types (share of all citations)
@@ -228,6 +235,7 @@ function render() {
 
   renderBrands();
   renderDiagnosis();
+  renderSources();
   renderArticles();
 
   // Platform filter chips
@@ -323,6 +331,34 @@ function renderDiagnosis() {
   const recs = diag?.recommendations || [];
   $("recs-wrap").hidden = !recs.length;
   $("recs").innerHTML = recs.map((r) => `<li>${esc(r)}</li>`).join("");
+}
+
+function renderSources() {
+  const names = DATA.site_names || {};
+  const draw = (pid) => {
+    const recs = ok.filter((r) => r.platform === pid);
+    const count = {}, type = {};
+    let total = 0;
+    recs.forEach((r) => r.analysis.domains.forEach((d, i) => {
+      if (!d) return;
+      count[d] = (count[d] || 0) + 1; type[d] = r.analysis.site_types?.[i] || ""; total++;
+    }));
+    const top = Object.entries(count).sort((a, b) => b[1] - a[1]).slice(0, 10);
+    const max = top.length ? top[0][1] : 1;
+    $("src-table").innerHTML = top.length ? `<thead><tr><th class="c">排名</th><th>网站</th><th>信源类型</th><th style="width:34%">引用次数</th><th class="c">引用率</th></tr></thead><tbody>${top.map(([d, n], i) => `
+      <tr><td class="c num">${i + 1}</td><td>${esc(names[d] || d)}${names[d] && names[d] !== d ? ` <span class="sub" style="font-size:12px">${esc(d)}</span>` : ""}</td>
+      <td><span class="pill ${type[d] === "品牌官网" ? "yes" : "no"}">${esc(type[d])}</span></td>
+      <td><div style="display:flex;gap:8px;align-items:center"><div class="track" style="flex:1"><div class="fill ${type[d] === "品牌官网" ? "own" : ""}" style="width:${(n / max) * 100}%"></div></div><span class="num" style="font-size:13px;min-width:2ch">${n}</span></div></td>
+      <td class="c num">${pct(n, total)}%</td></tr>`).join("")}</tbody>` : `<tbody><tr><td class="sub">这个平台的回答没有引用来源。</td></tr></tbody>`;
+  };
+  $("src-chips").innerHTML = DATA.platforms.map((p, i) => `<button type="button" class="chip" id="src-${esc(p.id)}" data-id="${esc(p.id)}" aria-pressed="${i === 0}">${esc(p.label)}</button>`).join("");
+  $("src-chips").addEventListener("click", (e) => {
+    const btn = e.target.closest(".chip");
+    if (!btn) return;
+    $("src-chips").querySelectorAll(".chip").forEach((b) => b.setAttribute("aria-pressed", String(b === btn)));
+    draw(btn.dataset.id);
+  });
+  if (DATA.platforms.length) draw(DATA.platforms[0].id);
 }
 
 const ARTICLE_LIMIT = 15;
